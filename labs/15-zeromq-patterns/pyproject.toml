@@ -1,0 +1,49 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lab-15-zeromq-patterns"
+version = "0.1.0"
+description = "Lab for the corresponding chapter of Linux Distributed Systems Programming with Python."
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{ name = "Weqaar Janjua", email = "weqaar.janjua@packetfive.com" }]
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+  "pybootstrap[gates] @ git+https://github.com/packetfive/pybootstrap.git@32a0e5c64a3a2fe3269a051ec39700a9b9a25a55",
+  "ruff>=0.4",
+  "pyright>=1.1",
+  "pytest>=8",
+  "pytest-cov>=5",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pybootstrap]
+gates = ["format", "lint", "typecheck", "test"]
+coverage-min = 80
+coverage-package = "lab_15_zeromq_patterns"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
+
+[tool.pyright]
+pythonVersion = "3.10"
+typeCheckingMode = "basic"
+include = ["src", "tests"]
+reportMissingImports = "error"
+reportMissingTypeStubs = "none"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "--cov-report=term-missing --import-mode=importlib"

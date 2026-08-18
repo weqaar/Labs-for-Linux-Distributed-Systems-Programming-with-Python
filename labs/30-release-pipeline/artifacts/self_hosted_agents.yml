@@ -1,0 +1,76 @@
+- name: Converge relay self-hosted agents
+  hosts: relay_agents
+  become: true
+  vars:
+    relay_agent_root: /opt/relay-agent
+    relay_agent_version: "3.242.1"
+  tasks:
+    - name: Install required packages
+      ansible.builtin.package:
+        name:
+          - git
+          - python3-venv
+        state: present
+    - name: Ensure relay group
+      ansible.builtin.group:
+        name: relay
+        system: true
+        state: present
+    - name: Ensure relay user
+      ansible.builtin.user:
+        name: relay
+        group: relay
+        system: true
+        create_home: false
+        shell: /usr/sbin/nologin
+        state: present
+    - name: Ensure agent directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: relay
+        group: relay
+        mode: "0750"
+      loop:
+        - "{{ relay_agent_root }}"
+        - "{{ relay_agent_root }}/work"
+    - name: Pin agent version
+      ansible.builtin.copy:
+        dest: "{{ relay_agent_root }}/agent-version.txt"
+        content: "{{ relay_agent_version }}\n"
+        owner: relay
+        group: relay
+        mode: "0644"
+    - name: Render relay agent service
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/relay-agent.service
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          [Unit]
+          Description=Relay self-hosted agent
+          After=network-online.target
+
+          [Service]
+          User=relay
+          Group=relay
+          WorkingDirectory={{ relay_agent_root }}
+          ExecStart=/usr/bin/python3 -m relay_agent --work {{ relay_agent_root }}/work
+          Restart=always
+
+          [Install]
+          WantedBy=multi-user.target
+      notify: Restart relay agent
+    - name: Ensure relay agent is enabled
+      ansible.builtin.systemd_service:
+        name: relay-agent
+        enabled: true
+        state: started
+        daemon_reload: true
+  handlers:
+    - name: Restart relay agent
+      ansible.builtin.systemd_service:
+        name: relay-agent
+        state: restarted
+        daemon_reload: true

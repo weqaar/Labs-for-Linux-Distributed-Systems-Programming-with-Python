@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+package relay.v2;
+
+message Task {
+  reserved 5;
+  reserved "legacy_queue";
+
+  string id = 1;
+  string action = 2;
+  optional string owner = 3;
+  int32 priority = 4;
+}

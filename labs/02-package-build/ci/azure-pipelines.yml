@@ -1,0 +1,66 @@
+trigger:
+  branches:
+    include:
+      - main
+
+jobs:
+  - job: executables
+    strategy:
+      matrix:
+        linux_x64:
+          image: ubuntu-latest
+          executable: dist/relayctl
+        windows_x64:
+          image: windows-latest
+          executable: dist/relayctl.exe
+    pool:
+      vmImage: $(image)
+    steps:
+      - task: UsePythonVersion@0
+        inputs:
+          versionSpec: "3.12"
+
+      - script: python -m pip install -e ".[dev]"
+        displayName: Install the lab
+
+      - script: pybootstrap check
+        displayName: Run quality gates
+
+      - script: python -m build
+        displayName: Build the wheel and source distribution
+
+      - script: python -m twine check dist/*.whl dist/*.tar.gz
+        displayName: Check Python distributions
+
+      - script: >-
+          python -m PyInstaller --onefile --name relayctl
+          --paths src src/lab_02_package_build/__main__.py
+        displayName: Build relayctl
+
+      - bash: |
+          set -eu
+          test "$(head -c 4 "$(executable)" | od -An -tx1 | tr -d ' \n')" = "7f454c46"
+          readelf --file-header "$(executable)"
+          readelf --program-headers "$(executable)"
+          "$(executable)" --version
+        condition: eq(variables['Agent.OS'], 'Linux')
+        displayName: Inspect the ELF executable
+
+      - powershell: |
+          $bytes = [System.IO.File]::ReadAllBytes("$(executable)")
+          if ($bytes[0] -ne 0x4d -or $bytes[1] -ne 0x5a) {
+            throw "Missing MZ signature"
+          }
+          $offset = [BitConverter]::ToInt32($bytes, 0x3c)
+          if ($bytes[$offset] -ne 0x50 -or $bytes[$offset + 1] -ne 0x45 `
+              -or $bytes[$offset + 2] -ne 0 -or $bytes[$offset + 3] -ne 0) {
+            throw "Missing PE signature"
+          }
+          & "$(executable)" --version
+        condition: eq(variables['Agent.OS'], 'Windows_NT')
+        displayName: Inspect the PE executable
+
+      - task: PublishPipelineArtifact@1
+        inputs:
+          targetPath: $(executable)
+          artifact: relayctl-$(Agent.OS)-$(Agent.OSArchitecture)

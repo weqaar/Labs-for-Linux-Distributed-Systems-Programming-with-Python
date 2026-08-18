@@ -1,0 +1,13 @@
+let lookback = 30m;
+let noisyRoutes = dynamic(["/livez", "/readyz"]);
+AppRequests
+| where TimeGenerated > ago(lookback)
+| where Name !in (noisyRoutes)
+| project OperationId, Name, Success, DurationMs, ResultCode
+| join kind=leftouter (
+    AppDependencies
+    | where TimeGenerated > ago(lookback)
+    | summarize dependency_failures = countif(Success == false), p95_dependency_ms = percentile(DurationMs, 95) by OperationId, Target, DependencyType
+) on OperationId
+| summarize request_failures = countif(Success == false), dependency_failures = sum(dependency_failures), p95_dependency_ms = max(p95_dependency_ms) by Name, Target
+| top 10 by dependency_failures desc

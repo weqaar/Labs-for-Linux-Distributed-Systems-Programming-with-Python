@@ -1,0 +1,60 @@
+trigger: none
+pr: none
+variables:
+  acrName: relayacr
+  acrLoginServer: relay.azurecr.io
+  imageName: relay
+  evidenceFile: artifacts/release-evidence.json
+stages:
+  - stage: Quality
+    jobs:
+      - job: QualityGate
+        steps:
+          - script: make structure
+          - script: make labs
+          - script: python -m lab_30_release_pipeline.release verify-evidence --evidence $(evidenceFile) --commit $(Build.SourceVersion)
+  - stage: Build
+    dependsOn: Quality
+    jobs:
+      - job: BuildOnce
+        steps:
+          - script: az acr build --registry $(acrName) --image $(imageName):$(Build.SourceVersion) .
+          - script: python -m lab_30_release_pipeline.release emit-digests --evidence $(evidenceFile) --commit $(Build.SourceVersion)
+            name: captureDigest
+  - stage: DeployStaging
+    dependsOn: Build
+    variables:
+      relayDigest: $[ stageDependencies.Build.BuildOnce.outputs['captureDigest.relayDigest'] ]
+      previousDigest: $[ stageDependencies.Build.BuildOnce.outputs['captureDigest.previousDigest'] ]
+    jobs:
+      - deployment: RelayStaging
+        environment: staging
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - script: kubectl set image deployment/relay relay=$(acrLoginServer)/$(imageName)@$(relayDigest)
+                - script: python -m lab_30_release_pipeline.fabric_executor verify --hosts relay-staging-a,relay-staging-b --expected-digest $(relayDigest)
+  - stage: DeployProduction
+    dependsOn: DeployStaging
+    variables:
+      relayDigest: $[ stageDependencies.Build.BuildOnce.outputs['captureDigest.relayDigest'] ]
+      previousDigest: $[ stageDependencies.Build.BuildOnce.outputs['captureDigest.previousDigest'] ]
+    jobs:
+      - deployment: RelayProduction
+        environment: production
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - script: kubectl set image deployment/relay relay=$(acrLoginServer)/$(imageName)@$(relayDigest)
+                - script: python -m lab_30_release_pipeline.fabric_executor verify --hosts relay-prod-a,relay-prod-b --expected-digest $(relayDigest)
+  - stage: Rollback
+    dependsOn: DeployProduction
+    condition: failed('DeployProduction')
+    variables:
+      previousDigest: $[ stageDependencies.Build.BuildOnce.outputs['captureDigest.previousDigest'] ]
+    jobs:
+      - job: RollbackDigest
+        steps:
+          - script: kubectl set image deployment/relay relay=$(acrLoginServer)/$(imageName)@$(previousDigest)

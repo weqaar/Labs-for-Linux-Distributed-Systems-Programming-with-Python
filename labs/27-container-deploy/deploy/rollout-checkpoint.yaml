@@ -1,0 +1,13 @@
+apiVersion: relay.packetfive.dev/v1alpha1
+kind: RelayRolloutCheckpoint
+metadata:
+  name: relay
+spec:
+  image: relay.azurecr.io/relay
+  currentDigest: sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+  previousDigest: sha256:fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210
+  strategy:
+    type: RollingUpdate
+    maxUnavailable: 0
+    maxSurge: 1
+  rollbackCommand: kubectl set image deployment/relay relay=relay.azurecr.io/relay@sha256:fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210
