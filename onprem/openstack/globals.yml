@@ -1,0 +1,9 @@
+kolla_base_distro: ubuntu
+openstack_release: "2024.2"
+kolla_internal_vip_address: "10.70.0.10"
+network_interface: ens3
+neutron_external_interface: ens4
+enable_haproxy: "yes"
+enable_cinder: "no"
+enable_swift: "no"
+enable_barbican: "yes"

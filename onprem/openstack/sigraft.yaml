@@ -1,0 +1,23 @@
+heat_template_version: 2021-04-16
+description: SigRaft tenant network rendered after the OpenStack control plane exists
+parameters:
+  image:
+    type: string
+    default: ubuntu-24.04
+resources:
+  tenant_network:
+    type: OS::Neutron::Net
+    properties: {name: sigraft-tenant}
+  tenant_subnet:
+    type: OS::Neutron::Subnet
+    properties:
+      network: {get_resource: tenant_network}
+      cidr: 10.70.3.0/24
+      enable_dhcp: true
+  relay_security_group:
+    type: OS::Neutron::SecurityGroup
+    properties:
+      description: HTTPS ingress and traffic within the tenant network
+      rules:
+        - {direction: ingress, protocol: tcp, port_range_min: 443, port_range_max: 443}
+        - {direction: ingress, remote_ip_prefix: 10.70.3.0/24}

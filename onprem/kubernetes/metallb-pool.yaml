@@ -1,0 +1,11 @@
+apiVersion: metallb.io/v1beta1
+kind: IPAddressPool
+metadata: {name: sigraft-provider, namespace: metallb-system}
+spec:
+  addresses: [10.70.1.200-10.70.1.220]
+---
+apiVersion: metallb.io/v1beta1
+kind: L2Advertisement
+metadata: {name: sigraft-provider, namespace: metallb-system}
+spec:
+  ipAddressPools: [sigraft-provider]

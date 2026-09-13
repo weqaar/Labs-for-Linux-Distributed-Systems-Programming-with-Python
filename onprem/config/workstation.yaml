@@ -1,0 +1,41 @@
+version: 1
+name: sigraft-workstation
+profile: workstation
+allow_execution: false
+hardware_virtualization: true
+host_capacity: {vcpus: 16, memory_gib: 64, disk_gib: 1000}
+host_reserve: {vcpus: 4, memory_gib: 12, disk_gib: 120}
+virtual_machines:
+  - {name: control-1, role: control, address: 10.70.0.11, dns: 10.70.0.1, vcpus: 4, memory_gib: 12, disk_gib: 100}
+  - {name: worker-1, role: worker, address: 10.70.0.21, dns: 10.70.0.1, vcpus: 4, memory_gib: 16, disk_gib: 180}
+  - {name: storage-1, role: storage, address: 10.70.0.31, dns: 10.70.0.1, vcpus: 4, memory_gib: 20, disk_gib: 500}
+networks:
+  management: 10.70.0.0/24
+  provider: 10.70.1.0/24
+  storage: 10.70.2.0/24
+  tenant: 10.70.3.0/24
+services:
+  - ceph_or_minio
+  - harbor
+  - internal_dns
+  - jaeger
+  - loki
+  - nginx
+  - opentelemetry_collector
+  - postgresql
+  - prometheus_grafana
+  - rabbitmq
+  - valkey
+identity: {domain: workstation.sigraft.test}
+secret_env:
+  harbor_admin: SIGRAFT_HARBOR_ADMIN_PASSWORD
+  postgresql_admin: SIGRAFT_POSTGRES_ADMIN_PASSWORD
+  postgresql_relay: SIGRAFT_POSTGRES_RELAY_PASSWORD
+  rabbitmq: SIGRAFT_RABBITMQ_PASSWORD
+  valkey: SIGRAFT_VALKEY_PASSWORD
+  minio_root_user: SIGRAFT_MINIO_ROOT_USER
+  minio_root_password: SIGRAFT_MINIO_ROOT_PASSWORD
+  grafana_admin: SIGRAFT_GRAFANA_ADMIN_PASSWORD
+  loki_s3_access_key: SIGRAFT_LOKI_S3_ACCESS_KEY
+  loki_s3_secret_key: SIGRAFT_LOKI_S3_SECRET_KEY
+artifact_root: ..

@@ -1,0 +1,9 @@
+replicaCount: 3
+auth:
+  username: relay
+  existingPasswordSecret: rabbitmq-credentials
+persistence: {size: 40Gi}
+metrics:
+  enabled: true
+  serviceMonitor:
+    enabled: true

@@ -1,0 +1,452 @@
+- name: Validate the deployment host
+  hosts: localhost
+  connection: local
+  become: true
+  tags: [prerequisites]
+  vars_files: [group_vars/all.yml]
+  tasks:
+    - name: Require operator inputs
+      ansible.builtin.assert:
+        that:
+          - lookup('env', 'SIGRAFT_SSH_PUBLIC_KEY') | length > 20
+          - lookup('env', 'SIGRAFT_IMAGE_PATH') | length > 0
+          - lookup('env', 'SIGRAFT_IMAGE_SHA256') | length == 64
+          - lookup('env', 'KOLLA_PASSWORDS_FILE') | length > 0
+          - lookup('env', secret_env.harbor_admin) | length >= 16
+          - lookup('env', secret_env.postgresql_admin) | length >= 16
+          - lookup('env', secret_env.postgresql_relay) | length >= 16
+          - lookup('env', secret_env.rabbitmq) | length >= 16
+          - lookup('env', secret_env.valkey) | length >= 16
+          - lookup('env', secret_env.minio_root_user) | length > 0
+          - lookup('env', secret_env.minio_root_password) | length >= 16
+          - lookup('env', secret_env.grafana_admin) | length >= 16
+          - lookup('env', secret_env.loki_s3_access_key) | length > 0
+          - lookup('env', secret_env.loki_s3_secret_key) | length >= 16
+        fail_msg: Supply the documented environment inputs before apply.
+    - name: Check KVM acceleration
+      ansible.builtin.stat:
+        path: /dev/kvm
+      register: kvm_device
+    - name: Reject a host without KVM
+      ansible.builtin.assert:
+        that: kvm_device.stat.exists
+        fail_msg: Hardware virtualization and /dev/kvm are required.
+    - name: Install pinned host tools
+      ansible.builtin.apt:
+        name:
+          - cloud-image-utils
+          - libvirt-daemon-system
+          - python3-libvirt
+          - qemu-kvm
+          - qemu-utils
+          - python3-venv
+        state: present
+        update_cache: true
+    - name: Verify the operator supplied image checksum
+      ansible.builtin.command:
+        argv:
+          - sha256sum
+          - --check
+          - --status
+          - /dev/stdin
+        stdin: "{{ lookup('env', 'SIGRAFT_IMAGE_SHA256') }}  {{ lookup('env', 'SIGRAFT_IMAGE_PATH') }}"
+      changed_when: false
+
+- name: Create owned libvirt infrastructure
+  hosts: localhost
+  connection: local
+  become: true
+  tags: [infrastructure]
+  vars_files: [group_vars/all.yml]
+  tasks:
+    - name: Create the owned state directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: root
+        group: libvirt
+        mode: "0770"
+      loop:
+        - "{{ state_root }}"
+        - "{{ state_root }}/disks"
+        - "{{ state_root }}/seed"
+    - name: Define owned libvirt networks
+      community.libvirt.virt_net:
+        name: "{{ ownership_prefix }}-{{ item.key }}"
+        command: define
+        xml: "{{ lookup('template', '../libvirt/network.xml.j2') }}"
+      loop: "{{ networks | dict2items }}"
+    - name: Start owned libvirt networks
+      community.libvirt.virt_net:
+        name: "{{ ownership_prefix }}-{{ item.key }}"
+        state: active
+        autostart: true
+      loop: "{{ networks | dict2items }}"
+    - name: Create copy-on-write VM disks
+      ansible.builtin.command:
+        argv:
+          - qemu-img
+          - create
+          - -f
+          - qcow2
+          - -F
+          - qcow2
+          - -b
+          - "{{ lookup('env', 'SIGRAFT_IMAGE_PATH') }}"
+          - "{{ state_root }}/disks/{{ ownership_prefix }}-{{ item.name }}.qcow2"
+          - "{{ item.disk_gib }}G"
+        creates: "{{ state_root }}/disks/{{ ownership_prefix }}-{{ item.name }}.qcow2"
+      loop: "{{ virtual_machines }}"
+    - name: Render cloud-init user data
+      ansible.builtin.template:
+        src: templates/user-data.j2
+        dest: "{{ state_root }}/seed/{{ ownership_prefix }}-{{ item.name }}-user-data"
+        mode: "0600"
+      loop: "{{ virtual_machines }}"
+    - name: Render cloud-init metadata
+      ansible.builtin.template:
+        src: templates/meta-data.j2
+        dest: "{{ state_root }}/seed/{{ ownership_prefix }}-{{ item.name }}-meta-data"
+        mode: "0600"
+      loop: "{{ virtual_machines }}"
+    - name: Render cloud-init network data
+      ansible.builtin.template:
+        src: templates/network-config.j2
+        dest: "{{ state_root }}/seed/{{ ownership_prefix }}-{{ item.name }}-network-config"
+        mode: "0600"
+      loop: "{{ virtual_machines }}"
+    - name: Build cloud-init media
+      ansible.builtin.command:
+        argv:
+          - cloud-localds
+          - --network-config
+          - "{{ state_root }}/seed/{{ ownership_prefix }}-{{ item.name }}-network-config"
+          - "{{ state_root }}/seed/{{ ownership_prefix }}-{{ item.name }}.iso"
+          - "{{ state_root }}/seed/{{ ownership_prefix }}-{{ item.name }}-user-data"
+          - "{{ state_root }}/seed/{{ ownership_prefix }}-{{ item.name }}-meta-data"
+        creates: "{{ state_root }}/seed/{{ ownership_prefix }}-{{ item.name }}.iso"
+      loop: "{{ virtual_machines }}"
+    - name: Define owned virtual machines
+      community.libvirt.virt:
+        command: define
+        xml: "{{ lookup('template', 'templates/domain.xml.j2') }}"
+      loop: "{{ virtual_machines }}"
+    - name: Start owned virtual machines
+      community.libvirt.virt:
+        name: "{{ ownership_prefix }}-{{ item.name }}"
+        state: running
+      loop: "{{ virtual_machines }}"
+    - name: Wait for SSH
+      ansible.builtin.wait_for:
+        host: "{{ item.address }}"
+        port: 22
+        timeout: 600
+      loop: "{{ virtual_machines }}"
+
+- name: Install OpenStack with pinned Kolla Ansible
+  hosts: localhost
+  connection: local
+  tags: [openstack]
+  vars_files: [group_vars/all.yml]
+  tasks:
+    - name: Create the Kolla virtual environment
+      ansible.builtin.pip:
+        name:
+          - "kolla-ansible=={{ kolla_ansible_version }}"
+          - "ansible-core=={{ kolla_ansible_core_version }}"
+        virtualenv: "{{ state_root }}/kolla-venv"
+        virtualenv_command: python3 -m venv
+    - name: Copy reviewed Kolla globals
+      ansible.builtin.copy:
+        src: ../openstack/globals.yml
+        dest: "{{ state_root }}/globals.yml"
+        mode: "0640"
+    - name: Run the ordered Kolla lifecycle
+      ansible.builtin.command:
+        argv:
+          - "{{ state_root }}/kolla-venv/bin/kolla-ansible"
+          - -i
+          - "{{ playbook_dir }}/kolla-inventory"
+          - -e
+          - "@{{ state_root }}/globals.yml"
+          - -p
+          - "{{ lookup('env', 'KOLLA_PASSWORDS_FILE') }}"
+          - "{{ item }}"
+      loop: [bootstrap-servers, prechecks, deploy, post-deploy]
+      environment:
+        ANSIBLE_HOST_KEY_CHECKING: "False"
+
+- name: Install Kubernetes with pinned Kubespray
+  hosts: localhost
+  connection: local
+  tags: [kubernetes]
+  vars_files: [group_vars/all.yml]
+  tasks:
+    - name: Fetch the pinned Kubespray source
+      ansible.builtin.git:
+        repo: https://github.com/kubernetes-sigs/kubespray.git
+        dest: "{{ state_root }}/kubespray"
+        version: "{{ kubespray_version }}"
+        depth: 1
+    - name: Install Kubespray into its virtual environment
+      ansible.builtin.pip:
+        requirements: "{{ state_root }}/kubespray/requirements.txt"
+        virtualenv: "{{ state_root }}/kubespray-venv"
+        virtualenv_command: python3 -m venv
+    - name: Run the reviewed Kubespray cluster installer
+      ansible.builtin.command:
+        argv:
+          - "{{ state_root }}/kubespray-venv/bin/ansible-playbook"
+          - -i
+          - "{{ playbook_dir }}/kubespray-inventory.ini"
+          - "{{ state_root }}/kubespray/cluster.yml"
+          - -e
+          - "kube_version={{ kubernetes_version }}"
+      environment:
+        ANSIBLE_HOST_KEY_CHECKING: "False"
+    - name: Fetch the administrator kubeconfig
+      ansible.builtin.fetch:
+        src: /etc/kubernetes/admin.conf
+        dest: "{{ state_root }}/admin.conf"
+        flat: true
+      delegate_to: control-1
+      become: true
+
+- name: Install pinned platform charts
+  hosts: localhost
+  connection: local
+  tags: [platform]
+  vars_files: [group_vars/all.yml]
+  environment:
+    KUBECONFIG: "{{ state_root }}/admin.conf"
+  tasks:
+    - name: Create namespaces
+      kubernetes.core.k8s:
+        name: "{{ item }}"
+        api_version: v1
+        kind: Namespace
+        state: present
+      loop: [registry, ingress-nginx, data, messaging, observability, metallb-system]
+    - name: Create the Harbor credential
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: harbor-credentials
+            namespace: registry
+            labels:
+              app.kubernetes.io/managed-by: sigraft-on-prem
+          stringData:
+            HARBOR_ADMIN_PASSWORD: "{{ lookup('env', secret_env.harbor_admin) }}"
+      no_log: true
+    - name: Create the PostgreSQL credential
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: postgresql-credentials
+            namespace: data
+            labels:
+              app.kubernetes.io/managed-by: sigraft-on-prem
+          stringData:
+            postgres-password: "{{ lookup('env', secret_env.postgresql_admin) }}"
+            password: "{{ lookup('env', secret_env.postgresql_relay) }}"
+      no_log: true
+    - name: Create the RabbitMQ credential
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: rabbitmq-credentials
+            namespace: messaging
+            labels:
+              app.kubernetes.io/managed-by: sigraft-on-prem
+          stringData:
+            rabbitmq-password: "{{ lookup('env', secret_env.rabbitmq) }}"
+      no_log: true
+    - name: Create the Valkey credential
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: valkey-credentials
+            namespace: data
+            labels:
+              app.kubernetes.io/managed-by: sigraft-on-prem
+          stringData:
+            valkey-password: "{{ lookup('env', secret_env.valkey) }}"
+      no_log: true
+    - name: Create the MinIO root credential
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: minio-credentials
+            namespace: data
+            labels:
+              app.kubernetes.io/managed-by: sigraft-on-prem
+          stringData:
+            root-user: "{{ lookup('env', secret_env.minio_root_user) }}"
+            root-password: "{{ lookup('env', secret_env.minio_root_password) }}"
+      no_log: true
+    - name: Create the Loki object-store credential
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: loki-object-store
+            namespace: data
+            labels:
+              app.kubernetes.io/managed-by: sigraft-on-prem
+          stringData:
+            AWS_ACCESS_KEY_ID: "{{ lookup('env', secret_env.loki_s3_access_key) }}"
+            AWS_SECRET_ACCESS_KEY: "{{ lookup('env', secret_env.loki_s3_secret_key) }}"
+      no_log: true
+    - name: Create the Grafana credential
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: grafana-credentials
+            namespace: observability
+            labels:
+              app.kubernetes.io/managed-by: sigraft-on-prem
+          stringData:
+            admin-user: sigraft-admin
+            admin-password: "{{ lookup('env', secret_env.grafana_admin) }}"
+      no_log: true
+    - name: Add reviewed chart repositories
+      kubernetes.core.helm_repository:
+        name: "{{ item.name }}"
+        repo_url: "{{ item.url }}"
+      loop: "{{ helm_repositories }}"
+    - name: Install the load balancer and ingress
+      kubernetes.core.helm:
+        name: "{{ item.name }}"
+        chart_ref: "{{ item.chart }}"
+        chart_version: "{{ item.version }}"
+        release_namespace: "{{ item.namespace }}"
+        values_files: ["{{ artifact_root }}/kubernetes/helm-values/{{ item.values }}"]
+        wait: true
+      loop: "{{ edge_charts }}"
+    - name: Configure the owned load balancer address pool
+      kubernetes.core.k8s:
+        state: present
+        src: "{{ artifact_root }}/kubernetes/metallb-pool.yaml"
+    - name: Install registry and data services
+      kubernetes.core.helm:
+        name: "{{ item.name }}"
+        chart_ref: "{{ item.chart }}"
+        chart_version: "{{ item.version }}"
+        release_namespace: "{{ item.namespace }}"
+        values_files: ["{{ artifact_root }}/kubernetes/helm-values/{{ item.values }}"]
+        wait: true
+      loop: "{{ data_charts }}"
+    - name: Create the least-privilege Loki object-store user
+      kubernetes.core.k8s:
+        state: present
+        src: "{{ artifact_root }}/kubernetes/loki-object-user.yaml"
+    - name: Wait for the Loki object-store user
+      ansible.builtin.command:
+        argv:
+          - kubectl
+          - wait
+          - --for=condition=Complete
+          - job/loki-object-user
+          - -n
+          - data
+          - --timeout=5m
+      changed_when: false
+    - name: Install the full observability path
+      kubernetes.core.helm:
+        name: "{{ item.name }}"
+        chart_ref: "{{ item.chart }}"
+        chart_version: "{{ item.version }}"
+        release_namespace: "{{ item.namespace }}"
+        values_files: ["{{ artifact_root }}/kubernetes/helm-values/{{ item.values }}"]
+        wait: true
+      loop: "{{ observability_charts }}"
+
+- name: Validate deployed service boundaries
+  hosts: localhost
+  connection: local
+  tags: [validate]
+  vars_files: [group_vars/all.yml]
+  environment:
+    KUBECONFIG: "{{ state_root }}/admin.conf"
+  tasks:
+    - name: Run Kolla prechecks again
+      ansible.builtin.command:
+        argv:
+          - "{{ state_root }}/kolla-venv/bin/kolla-ansible"
+          - -i
+          - "{{ playbook_dir }}/kolla-inventory"
+          - -e
+          - "@{{ state_root }}/globals.yml"
+          - -p
+          - "{{ lookup('env', 'KOLLA_PASSWORDS_FILE') }}"
+          - prechecks
+      changed_when: false
+    - name: Wait for every owned Helm release
+      ansible.builtin.command:
+        argv: [kubectl, wait, --for=condition=Ready, pod, --all, -n, "{{ item }}", --timeout=10m]
+      loop: [registry, ingress-nginx, data, messaging, observability]
+      changed_when: false
+
+- name: Remove owned Kubernetes releases
+  hosts: localhost
+  connection: local
+  tags: [never, destroy-platform]
+  vars_files: [group_vars/all.yml]
+  environment:
+    KUBECONFIG: "{{ state_root }}/admin.conf"
+  tasks:
+    - name: Remove only releases declared by this deployment
+      kubernetes.core.helm:
+        name: "{{ item.name }}"
+        release_namespace: "{{ item.namespace }}"
+        state: absent
+        wait: true
+      loop: "{{ edge_charts + data_charts + observability_charts }}"
+
+- name: Remove owned libvirt infrastructure
+  hosts: localhost
+  connection: local
+  become: true
+  tags: [never, destroy-infrastructure]
+  vars_files: [group_vars/all.yml]
+  tasks:
+    - name: Remove only virtual machines with the ownership prefix
+      community.libvirt.virt:
+        name: "{{ ownership_prefix }}-{{ item.name }}"
+        state: destroyed
+      loop: "{{ virtual_machines }}"
+    - name: Undefine only owned virtual machines
+      community.libvirt.virt:
+        name: "{{ ownership_prefix }}-{{ item.name }}"
+        command: undefine
+        force: true
+      loop: "{{ virtual_machines }}"
+    - name: Remove only owned networks
+      community.libvirt.virt_net:
+        name: "{{ ownership_prefix }}-{{ item.key }}"
+        state: absent
+      loop: "{{ networks | dict2items }}"
+    - name: Remove the bounded owned state directory
+      ansible.builtin.file:
+        path: "{{ state_root }}"
+        state: absent

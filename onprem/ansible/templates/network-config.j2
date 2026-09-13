@@ -1,0 +1,12 @@
+version: 2
+ethernets:
+  ens3:
+    addresses: [{{ item.address }}/24]
+    routes:
+      - {to: 0.0.0.0/0, via: {{ item.dns }}}
+    nameservers:
+      addresses: [{{ item.dns }}]
+      search: [{{ identity.domain }}]
+  ens4: {dhcp4: false, optional: true}
+  ens5: {dhcp4: false, optional: true}
+  ens6: {dhcp4: false, optional: true}

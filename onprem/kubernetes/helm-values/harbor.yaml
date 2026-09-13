@@ -1,0 +1,18 @@
+expose:
+  type: ingress
+  tls:
+    enabled: true
+    certSource: auto
+  ingress:
+    hosts:
+      core: harbor.cloud.sigraft.test
+externalURL: https://harbor.cloud.sigraft.test
+existingSecretAdminPassword: harbor-credentials
+existingSecretAdminPasswordKey: HARBOR_ADMIN_PASSWORD
+persistence:
+  enabled: true
+  persistentVolumeClaim:
+    registry: {size: 100Gi}
+    database: {size: 20Gi}
+metrics:
+  enabled: true

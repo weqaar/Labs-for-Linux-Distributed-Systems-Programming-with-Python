@@ -1,0 +1,11 @@
+architecture: replication
+auth:
+  enabled: true
+  existingSecret: valkey-credentials
+primary:
+  persistence: {size: 20Gi}
+replica:
+  replicaCount: 2
+  persistence: {size: 20Gi}
+metrics:
+  enabled: true

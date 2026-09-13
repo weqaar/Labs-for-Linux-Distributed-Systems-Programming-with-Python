@@ -1,0 +1,41 @@
+<domain type="kvm">
+  <name>{{ ownership_prefix }}-{{ item.name }}</name>
+  <metadata>
+    <sigraft:owner xmlns:sigraft="urn:sigraft:ownership">{{ ownership_prefix }}</sigraft:owner>
+  </metadata>
+  <memory unit="GiB">{{ item.memory_gib }}</memory>
+  <vcpu>{{ item.vcpus }}</vcpu>
+  <os><type arch="x86_64" machine="q35">hvm</type></os>
+  <features><acpi/><apic/></features>
+  <cpu mode="host-passthrough"/>
+  <devices>
+    <disk type="file" device="disk">
+      <driver name="qemu" type="qcow2"/>
+      <source file="{{ state_root }}/disks/{{ ownership_prefix }}-{{ item.name }}.qcow2"/>
+      <target dev="vda" bus="virtio"/>
+    </disk>
+    <disk type="file" device="cdrom">
+      <source file="{{ state_root }}/seed/{{ ownership_prefix }}-{{ item.name }}.iso"/>
+      <target dev="sda" bus="sata"/>
+      <readonly/>
+    </disk>
+    <interface type="network">
+      <source network="{{ ownership_prefix }}-management"/>
+      <model type="virtio"/>
+    </interface>
+    <interface type="network">
+      <source network="{{ ownership_prefix }}-provider"/>
+      <model type="virtio"/>
+    </interface>
+    <interface type="network">
+      <source network="{{ ownership_prefix }}-storage"/>
+      <model type="virtio"/>
+    </interface>
+    <interface type="network">
+      <source network="{{ ownership_prefix }}-tenant"/>
+      <model type="virtio"/>
+    </interface>
+    <graphics type="spice" autoport="yes" listen="127.0.0.1"/>
+    <console type="pty"><target type="serial" port="0"/></console>
+  </devices>
+</domain>

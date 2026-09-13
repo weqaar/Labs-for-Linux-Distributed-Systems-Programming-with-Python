@@ -1,0 +1,14 @@
+architecture: replication
+auth:
+  username: relay
+  database: relay
+  existingSecret: postgresql-credentials
+primary:
+  persistence: {size: 100Gi}
+  resources:
+    requests: {cpu: 500m, memory: 1Gi}
+readReplicas:
+  replicaCount: 1
+  persistence: {size: 100Gi}
+metrics:
+  enabled: true

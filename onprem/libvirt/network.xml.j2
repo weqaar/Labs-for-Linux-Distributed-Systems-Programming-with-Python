@@ -1,0 +1,9 @@
+<network>
+  <name>{{ ownership_prefix }}-{{ item.key }}</name>
+  <bridge name="sr-{{ item.key | truncate(8, true, '') }}"/>
+  {% if item.key == 'management' %}<forward mode="nat"/>{% endif %}
+  <ip address="{{ item.value | ansible.utils.ipaddr('net') | ansible.utils.ipaddr('1') | ansible.utils.ipaddr('address') }}"
+      netmask="{{ item.value | ansible.utils.ipaddr('netmask') }}">
+    <dhcp/>
+  </ip>
+</network>

@@ -1,0 +1,42 @@
+mode: deployment
+replicaCount: 2
+image:
+  repository: otel/opentelemetry-collector-contrib
+config:
+  receivers:
+    otlp:
+      protocols:
+        grpc: {}
+        http: {}
+  processors:
+    batch: {}
+    memory_limiter:
+      check_interval: 5s
+      limit_mib: 400
+  exporters:
+    otlp/jaeger:
+      endpoint: jaeger.observability.svc.cluster.local:4317
+      tls: {insecure: true}
+    prometheus:
+      endpoint: 0.0.0.0:8889
+    otlphttp/loki:
+      endpoint: http://loki-gateway.data.svc.cluster.local/otlp
+  service:
+    pipelines:
+      traces:
+        receivers: [otlp]
+        processors: [memory_limiter, batch]
+        exporters: [otlp/jaeger]
+      metrics:
+        receivers: [otlp]
+        processors: [memory_limiter, batch]
+        exporters: [prometheus]
+      logs:
+        receivers: [otlp]
+        processors: [memory_limiter, batch]
+        exporters: [otlphttp/loki]
+ports:
+  prometheus:
+    enabled: true
+    containerPort: 8889
+    servicePort: 8889

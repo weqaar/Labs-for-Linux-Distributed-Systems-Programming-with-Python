@@ -1,0 +1,11 @@
+mode: distributed
+auth:
+  existingSecret: minio-credentials
+statefulset:
+  replicaCount: 4
+persistence:
+  enabled: true
+  size: 100Gi
+metrics:
+  serviceMonitor:
+    enabled: true

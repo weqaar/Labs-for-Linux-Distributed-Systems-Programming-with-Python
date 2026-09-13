@@ -1,0 +1,20 @@
+prometheus:
+  prometheusSpec:
+    retention: 15d
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          accessModes: [ReadWriteOnce]
+          resources:
+            requests: {storage: 100Gi}
+grafana:
+  admin:
+    existingSecret: grafana-credentials
+    userKey: admin-user
+    passwordKey: admin-password
+  persistence:
+    enabled: true
+    size: 20Gi
+  additionalDataSources:
+    - {name: Loki, type: loki, url: "http://loki-gateway.data.svc.cluster.local"}
+    - {name: Jaeger, type: jaeger, url: "http://jaeger.observability.svc.cluster.local:16686"}
