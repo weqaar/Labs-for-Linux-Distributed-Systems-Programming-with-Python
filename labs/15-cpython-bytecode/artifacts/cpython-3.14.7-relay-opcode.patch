@@ -1,0 +1,810 @@
+diff --git a/Include/internal/pycore_magic_number.h b/Include/internal/pycore_magic_number.h
+index f319510..944c34d 100644
+--- a/Include/internal/pycore_magic_number.h
++++ b/Include/internal/pycore_magic_number.h
+@@ -292,7 +292,8 @@ PC/launcher.c must also be updated.
+ 
+ */
+ 
+-#define PYC_MAGIC_NUMBER 3627
++/* Python 3.14.7+relay 3628 (Add RELAY_TASK_ID bytecode) */
++#define PYC_MAGIC_NUMBER 3628
+ /* This is equivalent to converting PYC_MAGIC_NUMBER to 2 bytes
+    (little-endian) and then appending b'\r\n'. */
+ #define PYC_MAGIC_NUMBER_TOKEN \
+diff --git a/Include/internal/pycore_opcode_metadata.h b/Include/internal/pycore_opcode_metadata.h
+index 273e1d8..30d1370 100644
+--- a/Include/internal/pycore_opcode_metadata.h
++++ b/Include/internal/pycore_opcode_metadata.h
+@@ -416,6 +416,8 @@ int _PyOpcode_num_popped(int opcode, int oparg)  {
+             return 0;
+         case RAISE_VARARGS:
+             return oparg;
++        case RELAY_TASK_ID:
++            return 1;
+         case RERAISE:
+             return 1 + oparg;
+         case RESERVED:
+@@ -903,6 +905,8 @@ int _PyOpcode_num_pushed(int opcode, int oparg)  {
+             return 1;
+         case RAISE_VARARGS:
+             return 0;
++        case RELAY_TASK_ID:
++            return 1;
+         case RERAISE:
+             return oparg;
+         case RESERVED:
+@@ -1261,6 +1265,7 @@ const struct opcode_metadata _PyOpcode_opcode_metadata[267] = {
+     [PUSH_EXC_INFO] = { true, INSTR_FMT_IX, 0 },
+     [PUSH_NULL] = { true, INSTR_FMT_IX, HAS_PURE_FLAG },
+     [RAISE_VARARGS] = { true, INSTR_FMT_IB, HAS_ARG_FLAG | HAS_ERROR_FLAG | HAS_ERROR_NO_POP_FLAG | HAS_ESCAPES_FLAG },
++    [RELAY_TASK_ID] = { true, INSTR_FMT_IX, HAS_ERROR_FLAG | HAS_ESCAPES_FLAG },
+     [RERAISE] = { true, INSTR_FMT_IB, HAS_ARG_FLAG | HAS_ERROR_FLAG | HAS_ERROR_NO_POP_FLAG | HAS_ESCAPES_FLAG },
+     [RESERVED] = { true, INSTR_FMT_IX, 0 },
+     [RESUME] = { true, INSTR_FMT_IB, HAS_ARG_FLAG | HAS_EVAL_BREAK_FLAG | HAS_ERROR_FLAG | HAS_ERROR_NO_POP_FLAG | HAS_ESCAPES_FLAG },
+@@ -1708,6 +1713,7 @@ const char *_PyOpcode_OpName[267] = {
+     [PUSH_EXC_INFO] = "PUSH_EXC_INFO",
+     [PUSH_NULL] = "PUSH_NULL",
+     [RAISE_VARARGS] = "RAISE_VARARGS",
++    [RELAY_TASK_ID] = "RELAY_TASK_ID",
+     [RERAISE] = "RERAISE",
+     [RESERVED] = "RESERVED",
+     [RESUME] = "RESUME",
+@@ -1787,7 +1793,6 @@ const uint8_t _PyOpcode_Caches[256] = {
+ extern const uint8_t _PyOpcode_Deopt[256];
+ #ifdef NEED_OPCODE_METADATA
+ const uint8_t _PyOpcode_Deopt[256] = {
+-    [121] = 121,
+     [122] = 122,
+     [123] = 123,
+     [124] = 124,
+@@ -1999,6 +2004,7 @@ const uint8_t _PyOpcode_Deopt[256] = {
+     [PUSH_EXC_INFO] = PUSH_EXC_INFO,
+     [PUSH_NULL] = PUSH_NULL,
+     [RAISE_VARARGS] = RAISE_VARARGS,
++    [RELAY_TASK_ID] = RELAY_TASK_ID,
+     [RERAISE] = RERAISE,
+     [RESERVED] = RESERVED,
+     [RESUME] = RESUME,
+@@ -2048,7 +2054,6 @@ const uint8_t _PyOpcode_Deopt[256] = {
+ #endif // NEED_OPCODE_METADATA
+ 
+ #define EXTRA_CASES \
+-    case 121: \
+     case 122: \
+     case 123: \
+     case 124: \
+diff --git a/Include/opcode_ids.h b/Include/opcode_ids.h
+index 209103c..5b97b91 100644
+--- a/Include/opcode_ids.h
++++ b/Include/opcode_ids.h
+@@ -44,93 +44,94 @@ extern "C" {
+ #define POP_TOP                                 31
+ #define PUSH_EXC_INFO                           32
+ #define PUSH_NULL                               33
+-#define RETURN_GENERATOR                        34
+-#define RETURN_VALUE                            35
+-#define SETUP_ANNOTATIONS                       36
+-#define STORE_SLICE                             37
+-#define STORE_SUBSCR                            38
+-#define TO_BOOL                                 39
+-#define UNARY_INVERT                            40
+-#define UNARY_NEGATIVE                          41
+-#define UNARY_NOT                               42
+-#define WITH_EXCEPT_START                       43
+-#define BINARY_OP                               44
+-#define BUILD_INTERPOLATION                     45
+-#define BUILD_LIST                              46
+-#define BUILD_MAP                               47
+-#define BUILD_SET                               48
+-#define BUILD_SLICE                             49
+-#define BUILD_STRING                            50
+-#define BUILD_TUPLE                             51
+-#define CALL                                    52
+-#define CALL_INTRINSIC_1                        53
+-#define CALL_INTRINSIC_2                        54
+-#define CALL_KW                                 55
+-#define COMPARE_OP                              56
+-#define CONTAINS_OP                             57
+-#define CONVERT_VALUE                           58
+-#define COPY                                    59
+-#define COPY_FREE_VARS                          60
+-#define DELETE_ATTR                             61
+-#define DELETE_DEREF                            62
+-#define DELETE_FAST                             63
+-#define DELETE_GLOBAL                           64
+-#define DELETE_NAME                             65
+-#define DICT_MERGE                              66
+-#define DICT_UPDATE                             67
+-#define END_ASYNC_FOR                           68
+-#define EXTENDED_ARG                            69
+-#define FOR_ITER                                70
+-#define GET_AWAITABLE                           71
+-#define IMPORT_FROM                             72
+-#define IMPORT_NAME                             73
+-#define IS_OP                                   74
+-#define JUMP_BACKWARD                           75
+-#define JUMP_BACKWARD_NO_INTERRUPT              76
+-#define JUMP_FORWARD                            77
+-#define LIST_APPEND                             78
+-#define LIST_EXTEND                             79
+-#define LOAD_ATTR                               80
+-#define LOAD_COMMON_CONSTANT                    81
+-#define LOAD_CONST                              82
+-#define LOAD_DEREF                              83
+-#define LOAD_FAST                               84
+-#define LOAD_FAST_AND_CLEAR                     85
+-#define LOAD_FAST_BORROW                        86
+-#define LOAD_FAST_BORROW_LOAD_FAST_BORROW       87
+-#define LOAD_FAST_CHECK                         88
+-#define LOAD_FAST_LOAD_FAST                     89
+-#define LOAD_FROM_DICT_OR_DEREF                 90
+-#define LOAD_FROM_DICT_OR_GLOBALS               91
+-#define LOAD_GLOBAL                             92
+-#define LOAD_NAME                               93
+-#define LOAD_SMALL_INT                          94
+-#define LOAD_SPECIAL                            95
+-#define LOAD_SUPER_ATTR                         96
+-#define MAKE_CELL                               97
+-#define MAP_ADD                                 98
+-#define MATCH_CLASS                             99
+-#define POP_JUMP_IF_FALSE                      100
+-#define POP_JUMP_IF_NONE                       101
+-#define POP_JUMP_IF_NOT_NONE                   102
+-#define POP_JUMP_IF_TRUE                       103
+-#define RAISE_VARARGS                          104
+-#define RERAISE                                105
+-#define SEND                                   106
+-#define SET_ADD                                107
+-#define SET_FUNCTION_ATTRIBUTE                 108
+-#define SET_UPDATE                             109
+-#define STORE_ATTR                             110
+-#define STORE_DEREF                            111
+-#define STORE_FAST                             112
+-#define STORE_FAST_LOAD_FAST                   113
+-#define STORE_FAST_STORE_FAST                  114
+-#define STORE_GLOBAL                           115
+-#define STORE_NAME                             116
+-#define SWAP                                   117
+-#define UNPACK_EX                              118
+-#define UNPACK_SEQUENCE                        119
+-#define YIELD_VALUE                            120
++#define RELAY_TASK_ID                           34
++#define RETURN_GENERATOR                        35
++#define RETURN_VALUE                            36
++#define SETUP_ANNOTATIONS                       37
++#define STORE_SLICE                             38
++#define STORE_SUBSCR                            39
++#define TO_BOOL                                 40
++#define UNARY_INVERT                            41
++#define UNARY_NEGATIVE                          42
++#define UNARY_NOT                               43
++#define WITH_EXCEPT_START                       44
++#define BINARY_OP                               45
++#define BUILD_INTERPOLATION                     46
++#define BUILD_LIST                              47
++#define BUILD_MAP                               48
++#define BUILD_SET                               49
++#define BUILD_SLICE                             50
++#define BUILD_STRING                            51
++#define BUILD_TUPLE                             52
++#define CALL                                    53
++#define CALL_INTRINSIC_1                        54
++#define CALL_INTRINSIC_2                        55
++#define CALL_KW                                 56
++#define COMPARE_OP                              57
++#define CONTAINS_OP                             58
++#define CONVERT_VALUE                           59
++#define COPY                                    60
++#define COPY_FREE_VARS                          61
++#define DELETE_ATTR                             62
++#define DELETE_DEREF                            63
++#define DELETE_FAST                             64
++#define DELETE_GLOBAL                           65
++#define DELETE_NAME                             66
++#define DICT_MERGE                              67
++#define DICT_UPDATE                             68
++#define END_ASYNC_FOR                           69
++#define EXTENDED_ARG                            70
++#define FOR_ITER                                71
++#define GET_AWAITABLE                           72
++#define IMPORT_FROM                             73
++#define IMPORT_NAME                             74
++#define IS_OP                                   75
++#define JUMP_BACKWARD                           76
++#define JUMP_BACKWARD_NO_INTERRUPT              77
++#define JUMP_FORWARD                            78
++#define LIST_APPEND                             79
++#define LIST_EXTEND                             80
++#define LOAD_ATTR                               81
++#define LOAD_COMMON_CONSTANT                    82
++#define LOAD_CONST                              83
++#define LOAD_DEREF                              84
++#define LOAD_FAST                               85
++#define LOAD_FAST_AND_CLEAR                     86
++#define LOAD_FAST_BORROW                        87
++#define LOAD_FAST_BORROW_LOAD_FAST_BORROW       88
++#define LOAD_FAST_CHECK                         89
++#define LOAD_FAST_LOAD_FAST                     90
++#define LOAD_FROM_DICT_OR_DEREF                 91
++#define LOAD_FROM_DICT_OR_GLOBALS               92
++#define LOAD_GLOBAL                             93
++#define LOAD_NAME                               94
++#define LOAD_SMALL_INT                          95
++#define LOAD_SPECIAL                            96
++#define LOAD_SUPER_ATTR                         97
++#define MAKE_CELL                               98
++#define MAP_ADD                                 99
++#define MATCH_CLASS                            100
++#define POP_JUMP_IF_FALSE                      101
++#define POP_JUMP_IF_NONE                       102
++#define POP_JUMP_IF_NOT_NONE                   103
++#define POP_JUMP_IF_TRUE                       104
++#define RAISE_VARARGS                          105
++#define RERAISE                                106
++#define SEND                                   107
++#define SET_ADD                                108
++#define SET_FUNCTION_ATTRIBUTE                 109
++#define SET_UPDATE                             110
++#define STORE_ATTR                             111
++#define STORE_DEREF                            112
++#define STORE_FAST                             113
++#define STORE_FAST_LOAD_FAST                   114
++#define STORE_FAST_STORE_FAST                  115
++#define STORE_GLOBAL                           116
++#define STORE_NAME                             117
++#define SWAP                                   118
++#define UNPACK_EX                              119
++#define UNPACK_SEQUENCE                        120
++#define YIELD_VALUE                            121
+ #define RESUME                                 128
+ #define BINARY_OP_ADD_FLOAT                    129
+ #define BINARY_OP_ADD_INT                      130
+@@ -249,7 +250,7 @@ extern "C" {
+ #define SETUP_WITH                             265
+ #define STORE_FAST_MAYBE_NULL                  266
+ 
+-#define HAVE_ARGUMENT                           43
++#define HAVE_ARGUMENT                           44
+ #define MIN_SPECIALIZED_OPCODE                 129
+ #define MIN_INSTRUMENTED_OPCODE                234
+ 
+diff --git a/Lib/_opcode_metadata.py b/Lib/_opcode_metadata.py
+index b9304ec..46d8897 100644
+--- a/Lib/_opcode_metadata.py
++++ b/Lib/_opcode_metadata.py
+@@ -247,93 +247,94 @@ opmap = {
+     'POP_TOP': 31,
+     'PUSH_EXC_INFO': 32,
+     'PUSH_NULL': 33,
+-    'RETURN_GENERATOR': 34,
+-    'RETURN_VALUE': 35,
+-    'SETUP_ANNOTATIONS': 36,
+-    'STORE_SLICE': 37,
+-    'STORE_SUBSCR': 38,
+-    'TO_BOOL': 39,
+-    'UNARY_INVERT': 40,
+-    'UNARY_NEGATIVE': 41,
+-    'UNARY_NOT': 42,
+-    'WITH_EXCEPT_START': 43,
+-    'BINARY_OP': 44,
+-    'BUILD_INTERPOLATION': 45,
+-    'BUILD_LIST': 46,
+-    'BUILD_MAP': 47,
+-    'BUILD_SET': 48,
+-    'BUILD_SLICE': 49,
+-    'BUILD_STRING': 50,
+-    'BUILD_TUPLE': 51,
+-    'CALL': 52,
+-    'CALL_INTRINSIC_1': 53,
+-    'CALL_INTRINSIC_2': 54,
+-    'CALL_KW': 55,
+-    'COMPARE_OP': 56,
+-    'CONTAINS_OP': 57,
+-    'CONVERT_VALUE': 58,
+-    'COPY': 59,
+-    'COPY_FREE_VARS': 60,
+-    'DELETE_ATTR': 61,
+-    'DELETE_DEREF': 62,
+-    'DELETE_FAST': 63,
+-    'DELETE_GLOBAL': 64,
+-    'DELETE_NAME': 65,
+-    'DICT_MERGE': 66,
+-    'DICT_UPDATE': 67,
+-    'END_ASYNC_FOR': 68,
+-    'EXTENDED_ARG': 69,
+-    'FOR_ITER': 70,
+-    'GET_AWAITABLE': 71,
+-    'IMPORT_FROM': 72,
+-    'IMPORT_NAME': 73,
+-    'IS_OP': 74,
+-    'JUMP_BACKWARD': 75,
+-    'JUMP_BACKWARD_NO_INTERRUPT': 76,
+-    'JUMP_FORWARD': 77,
+-    'LIST_APPEND': 78,
+-    'LIST_EXTEND': 79,
+-    'LOAD_ATTR': 80,
+-    'LOAD_COMMON_CONSTANT': 81,
+-    'LOAD_CONST': 82,
+-    'LOAD_DEREF': 83,
+-    'LOAD_FAST': 84,
+-    'LOAD_FAST_AND_CLEAR': 85,
+-    'LOAD_FAST_BORROW': 86,
+-    'LOAD_FAST_BORROW_LOAD_FAST_BORROW': 87,
+-    'LOAD_FAST_CHECK': 88,
+-    'LOAD_FAST_LOAD_FAST': 89,
+-    'LOAD_FROM_DICT_OR_DEREF': 90,
+-    'LOAD_FROM_DICT_OR_GLOBALS': 91,
+-    'LOAD_GLOBAL': 92,
+-    'LOAD_NAME': 93,
+-    'LOAD_SMALL_INT': 94,
+-    'LOAD_SPECIAL': 95,
+-    'LOAD_SUPER_ATTR': 96,
+-    'MAKE_CELL': 97,
+-    'MAP_ADD': 98,
+-    'MATCH_CLASS': 99,
+-    'POP_JUMP_IF_FALSE': 100,
+-    'POP_JUMP_IF_NONE': 101,
+-    'POP_JUMP_IF_NOT_NONE': 102,
+-    'POP_JUMP_IF_TRUE': 103,
+-    'RAISE_VARARGS': 104,
+-    'RERAISE': 105,
+-    'SEND': 106,
+-    'SET_ADD': 107,
+-    'SET_FUNCTION_ATTRIBUTE': 108,
+-    'SET_UPDATE': 109,
+-    'STORE_ATTR': 110,
+-    'STORE_DEREF': 111,
+-    'STORE_FAST': 112,
+-    'STORE_FAST_LOAD_FAST': 113,
+-    'STORE_FAST_STORE_FAST': 114,
+-    'STORE_GLOBAL': 115,
+-    'STORE_NAME': 116,
+-    'SWAP': 117,
+-    'UNPACK_EX': 118,
+-    'UNPACK_SEQUENCE': 119,
+-    'YIELD_VALUE': 120,
++    'RELAY_TASK_ID': 34,
++    'RETURN_GENERATOR': 35,
++    'RETURN_VALUE': 36,
++    'SETUP_ANNOTATIONS': 37,
++    'STORE_SLICE': 38,
++    'STORE_SUBSCR': 39,
++    'TO_BOOL': 40,
++    'UNARY_INVERT': 41,
++    'UNARY_NEGATIVE': 42,
++    'UNARY_NOT': 43,
++    'WITH_EXCEPT_START': 44,
++    'BINARY_OP': 45,
++    'BUILD_INTERPOLATION': 46,
++    'BUILD_LIST': 47,
++    'BUILD_MAP': 48,
++    'BUILD_SET': 49,
++    'BUILD_SLICE': 50,
++    'BUILD_STRING': 51,
++    'BUILD_TUPLE': 52,
++    'CALL': 53,
++    'CALL_INTRINSIC_1': 54,
++    'CALL_INTRINSIC_2': 55,
++    'CALL_KW': 56,
++    'COMPARE_OP': 57,
++    'CONTAINS_OP': 58,
++    'CONVERT_VALUE': 59,
++    'COPY': 60,
++    'COPY_FREE_VARS': 61,
++    'DELETE_ATTR': 62,
++    'DELETE_DEREF': 63,
++    'DELETE_FAST': 64,
++    'DELETE_GLOBAL': 65,
++    'DELETE_NAME': 66,
++    'DICT_MERGE': 67,
++    'DICT_UPDATE': 68,
++    'END_ASYNC_FOR': 69,
++    'EXTENDED_ARG': 70,
++    'FOR_ITER': 71,
++    'GET_AWAITABLE': 72,
++    'IMPORT_FROM': 73,
++    'IMPORT_NAME': 74,
++    'IS_OP': 75,
++    'JUMP_BACKWARD': 76,
++    'JUMP_BACKWARD_NO_INTERRUPT': 77,
++    'JUMP_FORWARD': 78,
++    'LIST_APPEND': 79,
++    'LIST_EXTEND': 80,
++    'LOAD_ATTR': 81,
++    'LOAD_COMMON_CONSTANT': 82,
++    'LOAD_CONST': 83,
++    'LOAD_DEREF': 84,
++    'LOAD_FAST': 85,
++    'LOAD_FAST_AND_CLEAR': 86,
++    'LOAD_FAST_BORROW': 87,
++    'LOAD_FAST_BORROW_LOAD_FAST_BORROW': 88,
++    'LOAD_FAST_CHECK': 89,
++    'LOAD_FAST_LOAD_FAST': 90,
++    'LOAD_FROM_DICT_OR_DEREF': 91,
++    'LOAD_FROM_DICT_OR_GLOBALS': 92,
++    'LOAD_GLOBAL': 93,
++    'LOAD_NAME': 94,
++    'LOAD_SMALL_INT': 95,
++    'LOAD_SPECIAL': 96,
++    'LOAD_SUPER_ATTR': 97,
++    'MAKE_CELL': 98,
++    'MAP_ADD': 99,
++    'MATCH_CLASS': 100,
++    'POP_JUMP_IF_FALSE': 101,
++    'POP_JUMP_IF_NONE': 102,
++    'POP_JUMP_IF_NOT_NONE': 103,
++    'POP_JUMP_IF_TRUE': 104,
++    'RAISE_VARARGS': 105,
++    'RERAISE': 106,
++    'SEND': 107,
++    'SET_ADD': 108,
++    'SET_FUNCTION_ATTRIBUTE': 109,
++    'SET_UPDATE': 110,
++    'STORE_ATTR': 111,
++    'STORE_DEREF': 112,
++    'STORE_FAST': 113,
++    'STORE_FAST_LOAD_FAST': 114,
++    'STORE_FAST_STORE_FAST': 115,
++    'STORE_GLOBAL': 116,
++    'STORE_NAME': 117,
++    'SWAP': 118,
++    'UNPACK_EX': 119,
++    'UNPACK_SEQUENCE': 120,
++    'YIELD_VALUE': 121,
+     'INSTRUMENTED_END_FOR': 234,
+     'INSTRUMENTED_POP_ITER': 235,
+     'INSTRUMENTED_END_SEND': 236,
+@@ -367,5 +368,5 @@ opmap = {
+     'STORE_FAST_MAYBE_NULL': 266,
+ }
+ 
+-HAVE_ARGUMENT = 43
++HAVE_ARGUMENT = 44
+ MIN_INSTRUMENTED_OPCODE = 234
+diff --git a/Lib/test/test_importlib/test_util.py b/Lib/test/test_importlib/test_util.py
+index f7df5c3..ac6d7db 100644
+--- a/Lib/test/test_importlib/test_util.py
++++ b/Lib/test/test_importlib/test_util.py
+@@ -658,7 +658,7 @@ def test_magic_number(self):
+         # stakeholders such as OS package maintainers must be notified
+         # in advance. Such exceptional releases will then require an
+         # adjustment to this test case.
+-        EXPECTED_MAGIC_NUMBER = 3627
++        EXPECTED_MAGIC_NUMBER = 3628
+         actual = int.from_bytes(importlib.util.MAGIC_NUMBER[:2], 'little')
+ 
+         msg = (
+diff --git a/Lib/test/test_relay_opcode.py b/Lib/test/test_relay_opcode.py
+new file mode 100644
+index 0000000..fb0e14a
+--- /dev/null
++++ b/Lib/test/test_relay_opcode.py
+@@ -0,0 +1,71 @@
++import builtins
++import dis
++import unittest
++
++
++def direct_task_id(number):
++    return relay_task_id(number)
++
++
++class RelayTaskIdTests(unittest.TestCase):
++    def test_direct_call_uses_custom_opcode(self):
++        operations = [instruction.opname for instruction in dis.get_instructions(direct_task_id)]
++        self.assertIn("RELAY_TASK_ID", operations)
++        self.assertNotIn("CALL", operations)
++        self.assertEqual(direct_task_id(17), "task-17")
++
++    def test_instruction_has_balanced_stack_effect(self):
++        self.assertEqual(dis.stack_effect(dis.opmap["RELAY_TASK_ID"]), 0)
++
++    def test_builtin_supports_indirect_calls(self):
++        factory = builtins.relay_task_id
++        operations = [
++            instruction.opname
++            for instruction in dis.get_instructions(lambda number: factory(number))
++        ]
++        self.assertNotIn("RELAY_TASK_ID", operations)
++        self.assertIn("CALL", operations)
++        self.assertEqual(factory(7), "task-7")
++
++    def test_zero_and_arbitrary_precision_integer(self):
++        self.assertEqual(direct_task_id(0), "task-0")
++        large = 10**100
++        self.assertEqual(direct_task_id(large), f"task-{large}")
++
++    def test_invalid_values_raise_without_corrupting_stack(self):
++        with self.assertRaisesRegex(ValueError, "non-negative integer"):
++            direct_task_id(-1)
++        with self.assertRaisesRegex(TypeError, "non-negative integer"):
++            direct_task_id("17")
++        with self.assertRaisesRegex(TypeError, "non-negative integer"):
++            direct_task_id(True)
++
++    def test_nested_expression_preserves_neighboring_values(self):
++        self.assertEqual(
++            ("before", direct_task_id(4), "after"),
++            ("before", "task-4", "after"),
++        )
++
++    def test_keyword_and_wrong_arity_use_builtin_call_validation(self):
++        with self.assertRaises(TypeError):
++            builtins.relay_task_id(value=1)
++        with self.assertRaises(TypeError):
++            builtins.relay_task_id()
++        with self.assertRaises(TypeError):
++            builtins.relay_task_id(1, 2)
++
++    def test_direct_name_is_a_reserved_compiler_intrinsic(self):
++        namespace = {}
++        exec(
++            "def shadowed(relay_task_id, number):\n"
++            "    return relay_task_id(number)\n",
++            namespace,
++        )
++        shadowed = namespace["shadowed"]
++        self.assertEqual(shadowed(lambda number: f"shadow-{number}", 3), "task-3")
++        operations = [instruction.opname for instruction in dis.get_instructions(shadowed)]
++        self.assertIn("RELAY_TASK_ID", operations)
++
++
++if __name__ == "__main__":
++    unittest.main()
+diff --git a/Python/bltinmodule.c b/Python/bltinmodule.c
+index a8e9a17..24e5964 100644
+--- a/Python/bltinmodule.c
++++ b/Python/bltinmodule.c
+@@ -3356,6 +3356,42 @@ PyTypeObject PyZip_Type = {
+ };
+ 
+ 
++/*[clinic input]
++relay_task_id as builtin_relay_task_id
++
++    value: object
++    /
++
++Return ``task-N`` for a non-negative integer N.
++
++Direct calls to this educational builtin compile to the RELAY_TASK_ID
++bytecode instruction.
++[clinic start generated code]*/
++
++static PyObject *
++builtin_relay_task_id(PyObject *module, PyObject *value)
++/*[clinic end generated code: output=47c082948dd69bb3 input=3e022fb650582dbf]*/
++{
++    if (!PyLong_CheckExact(value)) {
++        PyErr_Format(
++            PyExc_TypeError,
++            "relay_task_id() requires a non-negative integer, got %.200s",
++            Py_TYPE(value)->tp_name
++        );
++        return NULL;
++    }
++    if (_PyLong_IsNegative((PyLongObject *)value)) {
++        PyErr_Format(
++            PyExc_ValueError,
++            "relay_task_id() requires a non-negative integer, got %S",
++            value
++        );
++        return NULL;
++    }
++    return PyUnicode_FromFormat("task-%S", value);
++}
++
++
+ static PyMethodDef builtin_methods[] = {
+     {"__build_class__", _PyCFunction_CAST(builtin___build_class__),
+      METH_FASTCALL | METH_KEYWORDS, build_class_doc},
+@@ -3397,6 +3433,7 @@ static PyMethodDef builtin_methods[] = {
+     BUILTIN_POW_METHODDEF
+     BUILTIN_PRINT_METHODDEF
+     BUILTIN_REPR_METHODDEF
++    BUILTIN_RELAY_TASK_ID_METHODDEF
+     BUILTIN_ROUND_METHODDEF
+     BUILTIN_SETATTR_METHODDEF
+     BUILTIN_SORTED_METHODDEF
+diff --git a/Python/bytecodes.c b/Python/bytecodes.c
+index 509a5a6..799be23 100644
+--- a/Python/bytecodes.c
++++ b/Python/bytecodes.c
+@@ -1161,6 +1161,34 @@ dummy_func(
+             res = PyStackRef_FromPyObjectSteal(res_o);
+         }
+ 
++        tier1 inst(RELAY_TASK_ID, (value -- res)) {
++            PyObject *value_o = PyStackRef_AsPyObjectBorrow(value);
++            if (!PyLong_CheckExact(value_o)) {
++                _PyErr_Format(
++                    tstate,
++                    PyExc_TypeError,
++                    "relay_task_id() requires a non-negative integer, got %.200s",
++                    Py_TYPE(value_o)->tp_name
++                );
++                PyStackRef_CLOSE(value);
++                ERROR_IF(true);
++            }
++            if (_PyLong_IsNegative((PyLongObject *)value_o)) {
++                _PyErr_Format(
++                    tstate,
++                    PyExc_ValueError,
++                    "relay_task_id() requires a non-negative integer, got %S",
++                    value_o
++                );
++                PyStackRef_CLOSE(value);
++                ERROR_IF(true);
++            }
++            PyObject *res_o = PyUnicode_FromFormat("task-%S", value_o);
++            PyStackRef_CLOSE(value);
++            ERROR_IF(res_o == NULL);
++            res = PyStackRef_FromPyObjectSteal(res_o);
++        }
++
+         tier1 inst(RAISE_VARARGS, (args[oparg] -- )) {
+             assert(oparg < 3);
+             PyObject *cause = oparg == 2 ? PyStackRef_AsPyObjectSteal(args[1]) : NULL;
+diff --git a/Python/clinic/bltinmodule.c.h b/Python/clinic/bltinmodule.c.h
+index 57f307e..3c68196 100644
+--- a/Python/clinic/bltinmodule.c.h
++++ b/Python/clinic/bltinmodule.c.h
+@@ -1284,4 +1284,16 @@ builtin_issubclass(PyObject *module, PyObject *const *args, Py_ssize_t nargs)
+ exit:
+     return return_value;
+ }
+-/*[clinic end generated code: output=bc267a3ce1596f24 input=a9049054013a1b77]*/
++
++PyDoc_STRVAR(builtin_relay_task_id__doc__,
++"relay_task_id($module, value, /)\n"
++"--\n"
++"\n"
++"Return ``task-N`` for a non-negative integer N.\n"
++"\n"
++"Direct calls to this educational builtin compile to the RELAY_TASK_ID\n"
++"bytecode instruction.");
++
++#define BUILTIN_RELAY_TASK_ID_METHODDEF    \
++    {"relay_task_id", (PyCFunction)builtin_relay_task_id, METH_O, builtin_relay_task_id__doc__},
++/*[clinic end generated code: output=2d5c9729dd290ead input=a9049054013a1b77]*/
+diff --git a/Python/codegen.c b/Python/codegen.c
+index 766d54d..abd7edf 100644
+--- a/Python/codegen.c
++++ b/Python/codegen.c
+@@ -4038,6 +4038,18 @@ static int
+ codegen_call(compiler *c, expr_ty e)
+ {
+     RETURN_IF_ERROR(codegen_validate_keywords(c, e->v.Call.keywords));
++    expr_ty func = e->v.Call.func;
++    if (
++        func->kind == Name_kind &&
++        _PyUnicode_EqualToASCIIString(func->v.Name.id, "relay_task_id") &&
++        asdl_seq_LEN(e->v.Call.args) == 1 &&
++        ((expr_ty)asdl_seq_GET(e->v.Call.args, 0))->kind != Starred_kind &&
++        asdl_seq_LEN(e->v.Call.keywords) == 0
++    ) {
++        VISIT(c, expr, (expr_ty)asdl_seq_GET(e->v.Call.args, 0));
++        ADDOP(c, LOC(e), RELAY_TASK_ID);
++        return SUCCESS;
++    }
+     int ret = maybe_optimize_method_call(c, e);
+     if (ret < 0) {
+         return ERROR;
+diff --git a/Python/generated_cases.c.h b/Python/generated_cases.c.h
+index 9e825c5..e094ea0 100644
+--- a/Python/generated_cases.c.h
++++ b/Python/generated_cases.c.h
+@@ -10399,6 +10399,68 @@
+             JUMP_TO_LABEL(error);
+         }
+ 
++        TARGET(RELAY_TASK_ID) {
++            #if Py_TAIL_CALL_INTERP
++            int opcode = RELAY_TASK_ID;
++            (void)(opcode);
++            #endif
++            frame->instr_ptr = next_instr;
++            next_instr += 1;
++            INSTRUCTION_STATS(RELAY_TASK_ID);
++            _PyStackRef value;
++            _PyStackRef res;
++            value = stack_pointer[-1];
++            PyObject *value_o = PyStackRef_AsPyObjectBorrow(value);
++            if (!PyLong_CheckExact(value_o)) {
++                _PyFrame_SetStackPointer(frame, stack_pointer);
++                _PyErr_Format(
++                              tstate,
++                              PyExc_TypeError,
++                              "relay_task_id() requires a non-negative integer, got %.200s",
++                              Py_TYPE(value_o)->tp_name
++                );
++                stack_pointer = _PyFrame_GetStackPointer(frame);
++                stack_pointer += -1;
++                assert(WITHIN_STACK_BOUNDS());
++                _PyFrame_SetStackPointer(frame, stack_pointer);
++                PyStackRef_CLOSE(value);
++                stack_pointer = _PyFrame_GetStackPointer(frame);
++                JUMP_TO_LABEL(error);
++            }
++            if (_PyLong_IsNegative((PyLongObject *)value_o)) {
++                _PyFrame_SetStackPointer(frame, stack_pointer);
++                _PyErr_Format(
++                              tstate,
++                              PyExc_ValueError,
++                              "relay_task_id() requires a non-negative integer, got %S",
++                              value_o
++                );
++                stack_pointer = _PyFrame_GetStackPointer(frame);
++                stack_pointer += -1;
++                assert(WITHIN_STACK_BOUNDS());
++                _PyFrame_SetStackPointer(frame, stack_pointer);
++                PyStackRef_CLOSE(value);
++                stack_pointer = _PyFrame_GetStackPointer(frame);
++                JUMP_TO_LABEL(error);
++            }
++            _PyFrame_SetStackPointer(frame, stack_pointer);
++            PyObject *res_o = PyUnicode_FromFormat("task-%S", value_o);
++            stack_pointer = _PyFrame_GetStackPointer(frame);
++            stack_pointer += -1;
++            assert(WITHIN_STACK_BOUNDS());
++            _PyFrame_SetStackPointer(frame, stack_pointer);
++            PyStackRef_CLOSE(value);
++            stack_pointer = _PyFrame_GetStackPointer(frame);
++            if (res_o == NULL) {
++                JUMP_TO_LABEL(error);
++            }
++            res = PyStackRef_FromPyObjectSteal(res_o);
++            stack_pointer[0] = res;
++            stack_pointer += 1;
++            assert(WITHIN_STACK_BOUNDS());
++            DISPATCH();
++        }
++
+         TARGET(RERAISE) {
+             #if Py_TAIL_CALL_INTERP
+             int opcode = RERAISE;
+diff --git a/Python/opcode_targets.h b/Python/opcode_targets.h
+index 8af445d..10511e2 100644
+--- a/Python/opcode_targets.h
++++ b/Python/opcode_targets.h
+@@ -34,6 +34,7 @@ static void *opcode_targets[256] = {
+     &&TARGET_POP_TOP,
+     &&TARGET_PUSH_EXC_INFO,
+     &&TARGET_PUSH_NULL,
++    &&TARGET_RELAY_TASK_ID,
+     &&TARGET_RETURN_GENERATOR,
+     &&TARGET_RETURN_VALUE,
+     &&TARGET_SETUP_ANNOTATIONS,
+@@ -127,7 +128,6 @@ static void *opcode_targets[256] = {
+     &&_unknown_opcode,
+     &&_unknown_opcode,
+     &&_unknown_opcode,
+-    &&_unknown_opcode,
+     &&TARGET_RESUME,
+     &&TARGET_BINARY_OP_ADD_FLOAT,
+     &&TARGET_BINARY_OP_ADD_INT,
+@@ -450,6 +450,7 @@ Py_PRESERVE_NONE_CC static PyObject *_TAIL_CALL_POP_TOP(TAIL_CALL_PARAMS);
+ Py_PRESERVE_NONE_CC static PyObject *_TAIL_CALL_PUSH_EXC_INFO(TAIL_CALL_PARAMS);
+ Py_PRESERVE_NONE_CC static PyObject *_TAIL_CALL_PUSH_NULL(TAIL_CALL_PARAMS);
+ Py_PRESERVE_NONE_CC static PyObject *_TAIL_CALL_RAISE_VARARGS(TAIL_CALL_PARAMS);
++Py_PRESERVE_NONE_CC static PyObject *_TAIL_CALL_RELAY_TASK_ID(TAIL_CALL_PARAMS);
+ Py_PRESERVE_NONE_CC static PyObject *_TAIL_CALL_RERAISE(TAIL_CALL_PARAMS);
+ Py_PRESERVE_NONE_CC static PyObject *_TAIL_CALL_RESERVED(TAIL_CALL_PARAMS);
+ Py_PRESERVE_NONE_CC static PyObject *_TAIL_CALL_RESUME(TAIL_CALL_PARAMS);
+@@ -689,6 +690,7 @@ static py_tail_call_funcptr INSTRUCTION_TABLE[256] = {
+     [PUSH_EXC_INFO] = _TAIL_CALL_PUSH_EXC_INFO,
+     [PUSH_NULL] = _TAIL_CALL_PUSH_NULL,
+     [RAISE_VARARGS] = _TAIL_CALL_RAISE_VARARGS,
++    [RELAY_TASK_ID] = _TAIL_CALL_RELAY_TASK_ID,
+     [RERAISE] = _TAIL_CALL_RERAISE,
+     [RESERVED] = _TAIL_CALL_RESERVED,
+     [RESUME] = _TAIL_CALL_RESUME,
+@@ -733,7 +735,6 @@ static py_tail_call_funcptr INSTRUCTION_TABLE[256] = {
+     [UNPACK_SEQUENCE_TWO_TUPLE] = _TAIL_CALL_UNPACK_SEQUENCE_TWO_TUPLE,
+     [WITH_EXCEPT_START] = _TAIL_CALL_WITH_EXCEPT_START,
+     [YIELD_VALUE] = _TAIL_CALL_YIELD_VALUE,
+-    [121] = _TAIL_CALL_UNKNOWN_OPCODE,
+     [122] = _TAIL_CALL_UNKNOWN_OPCODE,
+     [123] = _TAIL_CALL_UNKNOWN_OPCODE,
+     [124] = _TAIL_CALL_UNKNOWN_OPCODE,

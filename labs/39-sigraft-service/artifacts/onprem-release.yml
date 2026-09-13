@@ -1,0 +1,45 @@
+version: 1
+registry: harbor.cloud.sigraft.test/sigraft/sigraft
+variables:
+  commit: "{commit}"
+  digest: "{sigraft_digest}"
+  previous_digest: "{previous_digest}"
+  baseline_url: "{baseline_url}"
+  candidate_url: "{candidate_url}"
+  staging_observations: "{staging_observations}"
+stages:
+  - stage: Quality
+    commands:
+      - [make, structure]
+      - [make, labs]
+      - [python, -m, lab_39_sigraft_service.release, verify-evidence, --evidence, artifacts/release-evidence.json, --commit, "{commit}"]
+  - stage: BuildOnce
+    dependsOn: [Quality]
+    commands:
+      - [docker, buildx, build, --output, "type=oci,dest=sigraft.oci", .]
+      - [skopeo, copy, "oci:sigraft.oci", "docker://harbor.cloud.sigraft.test/sigraft/sigraft:{commit}"]
+      - [skopeo, inspect, --format, "{{.Digest}}", "docker://harbor.cloud.sigraft.test/sigraft/sigraft:{commit}"]
+  - stage: DeployStaging
+    dependsOn: [BuildOnce]
+    commands:
+      - [kubectl, --context, sigraft-staging, set, image, deployment/sigraft, "sigraft=harbor.cloud.sigraft.test/sigraft/sigraft@{sigraft_digest}"]
+      - [python, -m, lab_39_sigraft_service.fabric_executor, verify, --hosts, sigraft-staging-a,sigraft-staging-b, --expected-digest, "{sigraft_digest}"]
+  - stage: AnalyseStaging
+    dependsOn: [DeployStaging]
+    commands:
+      - [python, -m, lab_39_sigraft_service.observation_probe, --baseline-url, "{baseline_url}", --candidate-url, "{candidate_url}", --output, "{staging_observations}"]
+      - [python, -m, lab_39_sigraft_service.analytics_service, verify-release, --candidate-digest, "{sigraft_digest}", --observations, "{staging_observations}"]
+  - stage: ProductionApproval
+    dependsOn: [AnalyseStaging]
+    manual: true
+    commands: []
+  - stage: DeployProduction
+    dependsOn: [ProductionApproval]
+    commands:
+      - [kubectl, --context, sigraft-production, set, image, deployment/sigraft, "sigraft=harbor.cloud.sigraft.test/sigraft/sigraft@{sigraft_digest}"]
+      - [python, -m, lab_39_sigraft_service.fabric_executor, verify, --hosts, sigraft-prod-a,sigraft-prod-b, --expected-digest, "{sigraft_digest}"]
+  - stage: Rollback
+    dependsOn: [DeployProduction]
+    onFailure: true
+    commands:
+      - [kubectl, --context, sigraft-production, set, image, deployment/sigraft, "sigraft=harbor.cloud.sigraft.test/sigraft/sigraft@{previous_digest}"]

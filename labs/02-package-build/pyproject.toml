@@ -16,6 +16,7 @@ dependencies = []
 #   pip install -e ".[dev]"
 dev = [
   "build>=1.2",
+  "copier>=9.0",
   "pyinstaller>=6.10",
   "pybootstrap[gates] @ git+https://github.com/packetfive/pybootstrap.git@32a0e5c64a3a2fe3269a051ec39700a9b9a25a55",
   "ruff>=0.4",

@@ -1,0 +1,6 @@
+from {{ package_name }} import TASK_RESOURCE, TASK_STATES
+
+
+def test_relay_contract() -> None:
+    assert TASK_RESOURCE == "/tasks"
+    assert TASK_STATES == ("queued", "running", "succeeded", "failed")

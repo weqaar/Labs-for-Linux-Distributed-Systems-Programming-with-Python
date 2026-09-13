@@ -1,0 +1,78 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: relay-canary
+  labels:
+    app.kubernetes.io/name: relay
+    app.kubernetes.io/version: v2
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: relay
+      relay.packetfive.dev/track: canary
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: relay
+        app.kubernetes.io/version: v2
+        relay.packetfive.dev/track: canary
+    spec:
+      serviceAccountName: relay
+      containers:
+        - name: relay
+          image: relay.azurecr.io/relay@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+          ports:
+            - containerPort: 8080
+          startupProbe:
+            httpGet: {path: /livez, port: 8080}
+            periodSeconds: 5
+            failureThreshold: 30
+          readinessProbe:
+            httpGet: {path: /readyz, port: 8080}
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: {path: /livez, port: 8080}
+            periodSeconds: 10
+          resources:
+            requests: {cpu: "100m", memory: "128Mi"}
+            limits: {cpu: "500m", memory: "256Mi"}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: relay-canary
+spec:
+  selector:
+    app.kubernetes.io/name: relay
+    relay.packetfive.dev/track: canary
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: relay-canary
+  annotations:
+    nginx.ingress.kubernetes.io/canary: "true"
+    nginx.ingress.kubernetes.io/canary-weight: "10"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: relay.example.test
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: relay-canary
+                port:
+                  name: http

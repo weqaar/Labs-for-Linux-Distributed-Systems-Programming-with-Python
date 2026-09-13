@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -157,3 +158,33 @@ def test_bundled_command_has_the_native_format(bundled_relayctl: Path) -> None:
         assert executable_format(bundled_relayctl) is ExecutableFormat.PE
     else:
         pytest.skip("the lab targets Linux and Windows")
+
+
+def test_copier_template_generates_the_relay_contract(tmp_path: Path) -> None:
+    copier = shutil.which("copier")
+    assert copier is not None
+    destination = tmp_path / "generated-relay"
+
+    subprocess.run(
+        [
+            copier,
+            "copy",
+            "--defaults",
+            "--data",
+            "project_name=relay-generated",
+            "--data",
+            "package_name=relay_generated",
+            os.fspath(ROOT / "relay-template"),
+            os.fspath(destination),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    metadata = (destination / "pyproject.toml").read_text(encoding="utf-8")
+    contract = (destination / "src/relay_generated/__init__.py").read_text(encoding="utf-8")
+    assert 'name = "relay-generated"' in metadata
+    assert 'TASK_RESOURCE = "/tasks"' in contract
+    assert '"queued", "running", "succeeded", "failed"' in contract
+    assert (destination / ".copier-answers.yml").is_file()

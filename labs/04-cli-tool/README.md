@@ -70,3 +70,20 @@ The tests use `typer.testing.CliRunner` and `httpx.MockTransport`. They exercise
 the command and REST client together without opening a socket. The retry test
 injects a timeout, a 503 and a successful response, replaces sleep with a list,
 and asserts the exact exponential delays.
+## Python REPL debugging session
+
+After the editable install, inspect the package actually loaded by Python:
+
+```pycon
+>>> import inspect
+>>> import lab_04_cli_tool as lab
+>>> lab.__name__, lab.__file__
+>>> public = [name for name in dir(lab) if not name.startswith("_")]
+>>> public
+>>> [(name, type(getattr(lab, name)).__name__) for name in public]
+>>> inspect.getmembers(lab, inspect.isclass)
+>>> help(lab)
+```
+
+Inspect the CLI construction callable and one command callback before invoking
+the same behavior through the command-line parser.

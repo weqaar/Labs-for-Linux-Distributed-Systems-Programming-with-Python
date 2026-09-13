@@ -1,0 +1,22 @@
+apiVersion: relay.packetfive.dev/v1alpha1
+kind: RelayReleaseStrategies
+metadata:
+  name: relay
+spec:
+  rolling:
+    deployment: relay
+    maxUnavailable: 0
+    maxSurge: 1
+  canary:
+    stableService: relay
+    canaryService: relay-canary
+    initialWeightPercent: 10
+    promoteCommand: kubectl set image deployment/relay relay=relay.azurecr.io/relay@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    abortCommand: kubectl delete ingress/relay-canary service/relay-canary deployment/relay-canary
+  blueGreen:
+    service: relay
+    selectorKey: relay.packetfive.dev/release
+    activeValue: blue
+    previewValue: green
+    switchCommand: kubectl patch service relay --type merge -p {"spec":{"selector":{"relay.packetfive.dev/release":"green"}}}
+    rollbackCommand: kubectl patch service relay --type merge -p {"spec":{"selector":{"relay.packetfive.dev/release":"blue"}}}

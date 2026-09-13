@@ -1,0 +1,21 @@
+[schema]
+version = 1
+
+[identity]
+deployment_environment = "local"
+service_instance_id = "sigraft-local"
+
+[requests]
+max_body_bytes = 65536
+max_action_chars = 4096
+
+[telemetry]
+sample_ratio = 1.0
+exporter = "otlp"
+otlp_endpoint = "http://otel-collector:4317"
+otlp_insecure = true
+
+[analysis]
+enabled = true
+observations_path = "package:observations.csv"
+refresh_interval_seconds = 60.0

@@ -1,0 +1,76 @@
+- name: Converge SigRaft self-hosted agents
+  hosts: sigraft_agents
+  become: true
+  vars:
+    sigraft_agent_root: /opt/sigraft-agent
+    sigraft_agent_version: "3.242.1"
+  tasks:
+    - name: Install required packages
+      ansible.builtin.package:
+        name:
+          - git
+          - python3-venv
+        state: present
+    - name: Ensure SigRaft group
+      ansible.builtin.group:
+        name: sigraft
+        system: true
+        state: present
+    - name: Ensure SigRaft user
+      ansible.builtin.user:
+        name: sigraft
+        group: sigraft
+        system: true
+        create_home: false
+        shell: /usr/sbin/nologin
+        state: present
+    - name: Ensure agent directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: sigraft
+        group: sigraft
+        mode: "0750"
+      loop:
+        - "{{ sigraft_agent_root }}"
+        - "{{ sigraft_agent_root }}/work"
+    - name: Pin agent version
+      ansible.builtin.copy:
+        dest: "{{ sigraft_agent_root }}/agent-version.txt"
+        content: "{{ sigraft_agent_version }}\n"
+        owner: sigraft
+        group: sigraft
+        mode: "0644"
+    - name: Render SigRaft agent service
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/sigraft-agent.service
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          [Unit]
+          Description=SigRaft self-hosted agent
+          After=network-online.target
+
+          [Service]
+          User=sigraft
+          Group=sigraft
+          WorkingDirectory={{ sigraft_agent_root }}
+          ExecStart=/usr/bin/python3 -m sigraft_agent --work {{ sigraft_agent_root }}/work
+          Restart=always
+
+          [Install]
+          WantedBy=multi-user.target
+      notify: Restart SigRaft agent
+    - name: Ensure SigRaft agent is enabled
+      ansible.builtin.systemd_service:
+        name: sigraft-agent
+        enabled: true
+        state: started
+        daemon_reload: true
+  handlers:
+    - name: Restart SigRaft agent
+      ansible.builtin.systemd_service:
+        name: sigraft-agent
+        state: restarted
+        daemon_reload: true

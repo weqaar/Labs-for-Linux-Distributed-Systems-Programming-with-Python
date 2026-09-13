@@ -1,0 +1,13 @@
+_min_copier_version: "9.0"
+_subdirectory: template
+_answers_file: .copier-answers.yml
+
+project_name:
+  type: str
+  help: Distribution name for this relay service checkpoint
+  default: relay-service
+
+package_name:
+  type: str
+  help: Import package for the generated relay service
+  default: relay

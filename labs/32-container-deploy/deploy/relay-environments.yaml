@@ -1,0 +1,39 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: relay-staging
+  labels:
+    app.kubernetes.io/part-of: relay
+    relay.packetfive.dev/environment: staging
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: relay-budget
+  namespace: relay-staging
+spec:
+  hard:
+    requests.cpu: "2"
+    requests.memory: 4Gi
+    limits.cpu: "4"
+    limits.memory: 8Gi
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: relay-prod
+  labels:
+    app.kubernetes.io/part-of: relay
+    relay.packetfive.dev/environment: prod
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: relay-budget
+  namespace: relay-prod
+spec:
+  hard:
+    requests.cpu: "8"
+    requests.memory: 16Gi
+    limits.cpu: "16"
+    limits.memory: 32Gi

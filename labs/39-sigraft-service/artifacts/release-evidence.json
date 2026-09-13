@@ -1,0 +1,39 @@
+{
+  "commit": "9c7d2b6e43f7a1c0d5e4b3a2f1e0c9876543210f",
+  "qualityGates": {
+    "structure": true,
+    "labs": true,
+    "coverage": true
+  },
+  "componentEvidence": {
+    "projectTemplate": "copier",
+    "executableFormats": ["ELF", "PE"],
+    "objectModel": ["dataclass-slots", "repository-protocol", "polymorphic-handlers"],
+    "algorithmContracts": ["red-black-priority-index", "dependency-dag", "breadth-first-routing"],
+    "diagnosticContracts": ["monotonic-timing", "cprofile", "pyperf", "linux-command-plans"],
+    "concurrencyContracts": ["bounded-visibility-queue", "spawn-process-workers", "manager-coordination", "shared-memory-slices", "numa-aware-placement"],
+    "acceleratorContracts": ["pci-sysfs-topology", "numa-device-placement", "iommu-group-boundary", "gpu-nic-transfer-plan", "roce-congestion-policy"],
+    "languageRuntime": ["runtime-host-artifact-boundaries", "source-token-ast-code-object", "rv32i-add-full-adder-trace", "teaching-bytecode-vm", "typed-pyparsing-query", "cpython-3.14.7-source-pin", "relay-task-id-opcode"],
+    "streamBuffering": ["bounded-ring-buffer", "length-prefix", "pipe-backpressure"],
+    "networkStack": ["tcp-byte-stream", "scapy-ethernet-ip-tcp-round-trip", "top-down-encapsulation", "bottom-up-decapsulation"],
+    "taskTimeContract": ["UTC", "monotonic-deadline", "vector-clock"],
+    "backgroundWorkers": ["celery-json-task", "valkey-redis-transport", "late-acknowledgement", "worker-loss-redelivery", "bounded-prefetch"],
+    "rpcApis": ["fastapi-asgi", "pydantic-domain-validation", "bounded-request-metadata", "uvicorn-app-factory", "optional-uvloop", "event-loop-blocking-test"],
+    "distributedCompute": ["ray-single-node-cluster", "bounded-object-references", "resource-label-validation", "atomic-inflight-deduplication", "fingerprint-conflict", "bounded-actor-ledger", "usage-stats-opt-out"],
+    "realtimeApis": ["zeromq-xpub-sub", "websocket-replay", "graphql-query-mutation", "graphql-subscription", "graphql-http-endpoint"],
+    "resourceScheduling": ["typed-resource-request", "bounded-node-heartbeat", "admission-control", "deterministic-placement", "raft-backed-reservation", "node-specific-dispatch", "cgroup-affinity-numa-gpu-plan", "allocation-lease-recovery", "priority-fifo-quota"],
+    "infrastructureAsCode": ["bicep-modules", "what-if", "deployment-stacks", "aks-workload-identity", "acr"],
+    "deploymentAdapters": ["docker-sdk", "kubernetes-python", "openstacksdk"],
+    "kubernetesDelivery": ["clusterip-service", "nginx-ingress", "startup-readiness-liveness", "hpa", "pdb", "topology-spread", "rolling", "canary", "blue-green", "staging-production"],
+    "observability": ["opentelemetry-python", "otlp", "w3c-trace-context", "jaeger", "prometheus", "loki", "grafana", "azure-monitor"],
+    "operationalAnalysis": ["numpy", "pandas", "matplotlib", "scipy", "statsmodels", "descriptive-statistics", "confidence-interval", "mann-whitney", "ols-diagnostics", "web-report", "managed-refresh"],
+    "runtimeConfiguration": ["validated-toml", "content-revision", "monotonic-generation", "two-phase-reload", "rollback", "content-watcher", "sighup-event", "restart-required-reporting"],
+    "onPremCloud": ["qemu-kvm", "libvirt", "openstack", "harbor", "kubernetes", "nginx", "python-reconciliation"],
+    "dataCenterManagement": ["redfish-client", "service-root", "systems-collection", "same-origin-pagination", "read-only-inventory-endpoint"]
+  },
+  "imageRepository": "sigraft.azurecr.io/sigraft",
+  "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "previousDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "stagingDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "productionDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+}

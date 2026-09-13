@@ -43,3 +43,20 @@ ruff check src tests
 pyright src tests
 pytest
 ```
+## Python REPL debugging session
+
+After the editable install, inspect the package actually loaded by Python:
+
+```pycon
+>>> import inspect
+>>> import lab_03_quality_gate as lab
+>>> lab.__name__, lab.__file__
+>>> public = [name for name in dir(lab) if not name.startswith("_")]
+>>> public
+>>> [(name, type(getattr(lab, name)).__name__) for name in public]
+>>> inspect.getmembers(lab, inspect.isclass)
+>>> help(lab)
+```
+
+Inspect one callable signature and compare a raised application failure with a
+missing checker command. The two failures must remain distinguishable.

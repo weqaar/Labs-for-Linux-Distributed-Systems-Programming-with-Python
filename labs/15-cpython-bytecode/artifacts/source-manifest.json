@@ -1,0 +1,34 @@
+{
+  "source": {
+    "repository": "https://github.com/python/cpython.git",
+    "tag": "v3.14.7",
+    "commit": "823f0323ee6ec1402088b73bce1a38473cac36dc"
+  },
+  "customBytecodeMagic": 3628,
+  "sourceFiles": [
+    "Include/internal/pycore_magic_number.h",
+    "Lib/test/test_importlib/test_util.py",
+    "Lib/test/test_relay_opcode.py",
+    "Python/bltinmodule.c",
+    "Python/bytecodes.c",
+    "Python/codegen.c"
+  ],
+  "generatedFiles": [
+    "Include/internal/pycore_opcode_metadata.h",
+    "Include/opcode_ids.h",
+    "Lib/_opcode_metadata.py",
+    "Python/clinic/bltinmodule.c.h",
+    "Python/generated_cases.c.h",
+    "Python/opcode_targets.h"
+  ],
+  "buildCommands": [
+    "python3 Tools/clinic/clinic.py -f Python/bltinmodule.c",
+    "make regen-cases regen-opcode regen-opcode-targets",
+    "./configure --with-pydebug",
+    "make -j4"
+  ],
+  "testedCommands": [
+    "./python -m test -v test_relay_opcode",
+    "./python -m test -j4 test_builtin test_compile test_dis test_importlib.test_util"
+  ]
+}

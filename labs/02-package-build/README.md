@@ -5,6 +5,10 @@ native-looking executables for Linux and Windows. The executable contains a
 Python interpreter; PyInstaller bundles the program but does not compile Python
 to machine code.
 
+The checkpoint also contains `relay-template`, a Copier template that generates
+the shared `/tasks` resource and queued, running, succeeded, and failed state
+contract. This avoids starting later relay services by copying a stale project.
+
 ## Getting started
 
 ```bash
@@ -52,6 +56,7 @@ report success while checking nothing.
 src/lab_02_package_build/    the package
 tests/                the test suite
 ci/azure-pipelines.yml       Linux and Windows build jobs
+relay-template/       updateable Copier template for the relay project contract
 pyproject.toml        dependencies, tool settings and gate definition
 ```
 
@@ -96,3 +101,41 @@ dist/relayctl inspect --headers dist/relayctl
 The file header must report ELF and the intended machine architecture. On
 Windows, the pipeline checks both the `MZ` marker and the PE signature to prove
 the `.exe` suffix was not merely added to another file.
+
+## Generate the relay project shape
+
+```bash
+copier copy --defaults \
+  --data project_name=relay-service \
+  --data package_name=relay relay-template /tmp/generated-relay
+cd /tmp/generated-relay
+pytest
+```
+
+Copier records the template source and answers in `.copier-answers.yml`. A
+project generated from a versioned template can later use `copier update`, but
+the resulting diff still needs review. The test gate renders a fresh project and
+checks that its package preserves the relay resource and state contract.
+
+For the optional compiler comparison, build the same entry point with Nuitka
+onefile mode, then compare format, architecture, shared libraries, size and
+startup behavior with the required PyInstaller artifact. Both outputs remain
+specific to their target operating system and processor architecture.
+## Python REPL debugging session
+
+After the editable install, inspect the package actually loaded by Python:
+
+```pycon
+>>> import inspect
+>>> import lab_02_package_build as lab
+>>> lab.__name__, lab.__file__
+>>> public = [name for name in dir(lab) if not name.startswith("_")]
+>>> public
+>>> [(name, type(getattr(lab, name)).__name__) for name in public]
+>>> inspect.getmembers(lab, inspect.isclass)
+>>> help(lab)
+```
+
+Compare the imported module path with the wheel and executable inputs. Inspect
+one public callable signature before tracing how the same package enters each
+artifact.
