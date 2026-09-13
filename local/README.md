@@ -1,4 +1,4 @@
-# Local relay platform
+# Local SigRaft platform
 
 The Azure labs also run against local open-source resources. The product
 contract stays the same; configuration selects a local or Azure adapter.
@@ -11,11 +11,32 @@ docker compose --file local/compose.yaml up --detach
 curl --fail http://127.0.0.1:8080/readyz
 ```
 
-Add the observability profile when a lab needs traces:
+Add the observability profile when a lab needs telemetry:
 
 ```bash
 docker compose --file local/compose.yaml --profile observability up --detach
 ```
+
+Applications export OTLP to `http://127.0.0.1:4318` or
+`127.0.0.1:4317`. Open `http://127.0.0.1:3000` for Grafana,
+`http://127.0.0.1:16686` for Jaeger, or
+`http://127.0.0.1:9090` for Prometheus. The collector sends traces to Jaeger,
+metrics to Prometheus and logs to Loki. Grafana has all three data sources
+preconfigured so a trace ID can connect a request span to its logs and metrics.
+The SigRaft container mounts
+`labs/38-sigraft-service/config.example.toml` at
+`/etc/sigraft/config.toml`. That example selects the collector's OTLP gRPC
+receiver. Edit the host file and the managed watcher validates and applies its
+live fields. Send `SIGHUP` to request an immediate reload without waiting for
+the next content poll:
+
+```bash
+docker compose --file local/compose.yaml kill --signal SIGHUP sigraft
+curl --fail http://127.0.0.1:8080/metadata
+```
+
+The mounted file contains no secrets. Use a deployment-specific protected
+configuration source for Azure Monitor connection data.
 
 Stop the stack without deleting its volumes:
 
@@ -33,7 +54,7 @@ Use `down --volumes` only when the lab explicitly asks for a clean store.
 | Durable task records | Cosmos DB or Table Storage | PostgreSQL |
 | Cache and short leases | Azure Managed Redis | Valkey |
 | Brokered work | Service Bus | RabbitMQ |
-| Logs, metrics and traces | Azure Monitor | OpenTelemetry Collector and Jaeger |
+| Logs, metrics and traces | Azure Monitor | OpenTelemetry Collector, Jaeger, Prometheus, Loki and Grafana |
 | Service runtime | Container Apps or AKS | Docker Compose |
 | Several Linux hosts | Azure VMs | QEMU/libvirt or LXC |
 
@@ -48,9 +69,9 @@ TCG emulates the guest CPU and works when `/dev/kvm` is unavailable:
 qemu-system-x86_64 \
   -machine q35,accel=tcg \
   -m 2048 -smp 2 \
-  -drive file=relay-overlay.qcow2,if=virtio,format=qcow2 \
+  -drive file=sigraft-overlay.qcow2,if=virtio,format=qcow2 \
   -nic user,model=virtio-net-pci,hostfwd=tcp::8080-:8080 \
-  -qmp unix:relay-qmp.sock,server=on,wait=off \
+  -qmp unix:sigraft-qmp.sock,server=on,wait=off \
   -sandbox on,obsolete=deny,elevateprivileges=deny,spawn=deny
 ```
 
@@ -61,9 +82,9 @@ silently changing from KVM to TCG.
 
 ```bash
 test -r /dev/kvm
-virsh --connect qemu:///session define relay.xml
-virsh --connect qemu:///session start relay
-virsh --connect qemu:///session domifaddr relay
+virsh --connect qemu:///session define sigraft.xml
+virsh --connect qemu:///session start sigraft
+virsh --connect qemu:///session domifaddr sigraft
 ```
 
 Use the Lab 27 Python CLI to render a domain plan before defining it:
@@ -84,10 +105,10 @@ Create unprivileged containers so root in the guest maps to an ordinary host
 UID:
 
 ```bash
-lxc-create --name relay-a --template download -- \
+lxc-create --name sigraft-a --template download -- \
   --dist debian --release bookworm --arch amd64
-lxc-start --name relay-a --daemon
-lxc-info --name relay-a
+lxc-start --name sigraft-a --daemon
+lxc-info --name sigraft-a
 ```
 
 Do not use privileged LXC containers for untrusted workloads.

@@ -1,22 +1,32 @@
-name: sigraft-relay
+name: sigraft-local
 
 services:
-  relay:
+  sigraft:
     build:
       context: ..
-      dockerfile: local/relay.Dockerfile
+      dockerfile: local/sigraft.Dockerfile
     command:
       - python
       - -m
-      - lab_30_release_pipeline.relay_api
+      - lab_38_sigraft_service.sigraft_service
       - --host
       - 0.0.0.0
       - --port
       - "8080"
       - --digest
       - sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+      - --config
+      - /etc/sigraft/config.toml
+      - --environment
+      - local
+      - --instance-id
+      - ${SIGRAFT_INSTANCE_ID:-sigraft-local}
+      - --poll-interval
+      - "2"
+    volumes:
+      - ../labs/38-sigraft-service/config.example.toml:/etc/sigraft/config.toml:ro
     ports:
-      - "127.0.0.1:${RELAY_PORT:-8080}:8080"
+      - "127.0.0.1:${SIGRAFT_PORT:-8080}:8080"
     read_only: true
     tmpfs:
       - /tmp:size=64m,mode=1777
@@ -49,15 +59,15 @@ services:
   postgres:
     image: postgres:17-alpine
     environment:
-      POSTGRES_DB: relay
-      POSTGRES_USER: relay
-      POSTGRES_PASSWORD: relay-local-only
+      POSTGRES_DB: sigraft
+      POSTGRES_USER: sigraft
+      POSTGRES_PASSWORD: sigraft-local-only
     ports:
       - "127.0.0.1:5432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready --username relay --dbname relay"]
+      test: ["CMD-SHELL", "pg_isready --username sigraft --dbname sigraft"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -78,8 +88,8 @@ services:
   rabbitmq:
     image: rabbitmq:4-management-alpine
     environment:
-      RABBITMQ_DEFAULT_USER: relay
-      RABBITMQ_DEFAULT_PASS: relay-local-only
+      RABBITMQ_DEFAULT_USER: sigraft
+      RABBITMQ_DEFAULT_PASS: sigraft-local-only
     ports:
       - "127.0.0.1:5672:5672"
       - "127.0.0.1:15672:15672"
@@ -102,6 +112,7 @@ services:
       - "127.0.0.1:4318:4318"
     depends_on:
       - jaeger
+      - loki
 
   jaeger:
     image: jaegertracing/all-in-one:1.62.0
@@ -111,8 +122,50 @@ services:
     ports:
       - "127.0.0.1:16686:16686"
 
+  prometheus:
+    image: prom/prometheus:v3.2.1
+    profiles: [observability]
+    command: ["--config.file=/etc/prometheus/prometheus.yaml"]
+    volumes:
+      - ./prometheus.yaml:/etc/prometheus/prometheus.yaml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "127.0.0.1:9090:9090"
+    depends_on:
+      - otel-collector
+
+  loki:
+    image: grafana/loki:3.4.2
+    profiles: [observability]
+    command: ["-config.file=/etc/loki/config.yaml"]
+    volumes:
+      - ./loki.yaml:/etc/loki/config.yaml:ro
+      - loki-data:/loki
+    ports:
+      - "127.0.0.1:3100:3100"
+
+  grafana:
+    image: grafana/grafana:11.5.2
+    profiles: [observability]
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+    volumes:
+      - ./grafana-datasources.yaml:/etc/grafana/provisioning/datasources/sigraft.yaml:ro
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      - jaeger
+      - prometheus
+      - loki
+
 volumes:
   azurite-data:
   postgres-data:
   valkey-data:
   rabbitmq-data:
+  prometheus-data:
+  loki-data:
+  grafana-data:

@@ -1,0 +1,19 @@
+apiVersion: 1
+
+datasources:
+  - name: SigRaft traces
+    type: jaeger
+    access: proxy
+    url: http://jaeger:16686
+    uid: sigraft-traces
+    isDefault: true
+  - name: SigRaft metrics
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    uid: sigraft-metrics
+  - name: SigRaft logs
+    type: loki
+    access: proxy
+    url: http://loki:3100
+    uid: sigraft-logs
