@@ -34,13 +34,19 @@ errored=()
 for lab in "${labs}"/*/; do
     [[ -f "${lab}/pyproject.toml" ]] || continue
     name="$(basename "${lab}")"
-    scaffold=0
+    product_problem=0
 
     if grep -Rqs \
         "Placeholder so the project has something to import, test and type check" \
         "${lab}/src"; then
         echo "[FAIL ] product: generated greeting scaffold is still present"
-        scaffold=1
+        product_problem=1
+    fi
+
+    if [[ "${name}" != "38-sigraft-service" ]] && \
+        ! grep -Fqs "Python REPL debugging session" "${lab}/README.md"; then
+        echo "[FAIL ] product: README is missing its Python REPL debugging session"
+        product_problem=1
     fi
 
     args=(check)
@@ -54,7 +60,7 @@ for lab in "${labs}"/*/; do
 
     case "${status}" in
         0)
-            if [[ ${scaffold} -eq 1 ]]; then
+            if [[ ${product_problem} -eq 1 ]]; then
                 failed+=("${name}")
             else
                 passed+=("${name}")
