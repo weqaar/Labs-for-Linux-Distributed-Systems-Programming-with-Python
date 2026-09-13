@@ -8,10 +8,11 @@ Read the `AGENTS.md` inside a lab before changing that lab.
 These are the reader-facing labs for *Linux Distributed Systems Programming
 with Python*. The book source is private and must not be added here.
 
-The labs are independently runnable checkpoints of one production-grade
-product, not unrelated examples. The product is a distributed task service
-named `relay`, operated through `relayctl`. Lab 30 contains the runnable REST
-service, CLI and release path.
+The labs are independently runnable stages of one production-grade product,
+not unrelated examples. Labs 1 through 38 develop a distributed task service
+named `relay`, operated through `relayctl`. Lab 39 assembles those contracts as
+the SigRaft REST and GraphQL service, resource scheduler, CLI, operational
+report and Azure and on-prem release paths.
 
 Keep the product contract stable:
 
@@ -28,15 +29,22 @@ Changes should be made by someone comfortable with:
 - Python 3.10 or newer, packaging and `pyproject.toml`
 - pytest, coverage, `unittest.mock`, static typing and Ruff
 - Linux processes, sockets, packet tools, ELF and native extensions
-- REST, Typer, HTTPX, JSON, Protocol Buffers, gRPC, ZeroMQ and WebSockets
-- clocks, quorum, Raft, replication, partitioning, locks and backpressure
-- Azure Python SDKs, containers, QEMU/KVM, libvirt, LXC and Kata
-- OpenTelemetry, CI/CD, Ansible and Fabric
+- REST, GraphQL, Typer, HTTPX, JSON, Protocol Buffers, gRPC, ZeroMQ and
+  WebSockets
+- clocks, quorum, Raft, replication, partitioning, locks, resource scheduling
+  and backpressure
+- Azure and OpenStack Python SDKs, containers, QEMU/KVM, libvirt, LXC and Kata
+- Kubernetes, Harbor, Nginx, OpenTelemetry, CI/CD, Ansible and Fabric
+- NumPy, pandas, Matplotlib, SciPy, statsmodels and operational statistics
 
 Do not introduce company-owned code, identifiers, endpoints or configuration.
 Examples must remain original and use the `relay` vocabulary.
 
 ## CQC coding standards
+
+All changes must follow [`CODING_STANDARDS.md`](CODING_STANDARDS.md). A lab's
+own `AGENTS.md` adds lab-specific constraints but does not replace the
+shared type, object-design, validation, ownership and testing rules.
 
 Every lab is a pybootstrap project. Its `pyproject.toml` is the single source
 of truth for dependencies, build metadata and tool configuration.
@@ -72,8 +80,8 @@ pip install -e ".[dev]"
 pybootstrap check
 ```
 
-Keep each checkpoint self-contained. A lab may preserve interfaces and
-vocabulary from earlier checkpoints, but it must not import another lab.
+Keep each lab self-contained. A lab may preserve interfaces and vocabulary
+from earlier labs, but it must not import another lab.
 Cloud, network, subprocess, clock and runtime APIs belong behind injected
 boundaries so the default gate stays offline and deterministic.
 
