@@ -28,9 +28,10 @@ tests/                the test suite
   own table, so every tool stays usable on its own.
 - Release evidence must retain the Copier project contract, ELF and PE targets,
   Python execution and custom interpreter contracts, UTC and logical-time
-  contract, bounded multicore and NUMA placement, offline Scapy Ethernet,
-  IPv4 and TCP encapsulation, Celery and Valkey delivery, ZeroMQ, WebSocket and
-  GraphQL APIs, Bicep and AKS infrastructure, and the
+  contract, bounded multicore and NUMA placement, TCP streams, UDP datagrams
+  and bounded retry, offline Scapy Ethernet, IPv4, TCP and UDP encapsulation,
+  Celery and Valkey delivery, ZeroMQ, WebSocket and GraphQL APIs, Bicep and AKS
+  infrastructure, and the
   Nginx, scaling and progressive Kubernetes delivery evidence from earlier
   relay checkpoints, plus OpenTelemetry and the SigRaft on-prem cloud.
 - Release evidence must retain the NumPy, pandas, Matplotlib, SciPy and
@@ -44,6 +45,9 @@ tests/                the test suite
 - Release evidence must retain bounded Ray submission, atomic in-flight
   deduplication, fingerprint conflicts, resource validation and the default
   usage-statistics opt-out. Do not describe the actor ledger as durable.
+- Release evidence must retain Redis command serialization, client-sequence
+  interleaving, Lua script-cache reload, owner-token release and destination
+  fencing contracts.
 - The runnable service must keep REST and GraphQL on the same task methods.
   GraphQL operation errors remain distinct from HTTP transport failures.
 - Resource scheduling must reserve capacity before node-specific dispatch and

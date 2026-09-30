@@ -2,11 +2,25 @@
 
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass
 
 
 class StaleFenceError(RuntimeError):
     """Raised when a resumed stale writer tries to write after losing a lease."""
+
+
+class NoScriptError(RuntimeError):
+    """Raised when a cached Lua script is absent from the simulated server."""
+
+
+RELEASE_SCRIPT = """\
+if redis.call('get', KEYS[1]) == ARGV[1] then
+    return redis.call('del', KEYS[1])
+else
+    return 0
+end
+"""
 
 
 @dataclass
@@ -97,14 +111,38 @@ class SchedulerAttempt:
     fence: int | None = None
 
 
+@dataclass(frozen=True)
+class RedisCommandEvent:
+    """One complete turn through the simulated Redis command executor."""
+
+    sequence: int
+    client_id: str
+    command: str
+
+
 class InMemoryRedisStore:
-    """Minimal Redis-style key store with TTL support."""
+    """Serial Redis command executor with TTL and a volatile Lua script cache."""
 
     def __init__(self, clock: SimulationClock) -> None:
         self._clock = clock
         self._records: dict[str, RedisLockHandle] = {}
+        self._counters: dict[str, int] = {}
+        self._scripts: dict[str, str] = {}
+        self._events: list[RedisCommandEvent] = []
 
-    def set_nx_px(self, key: str, owner_token: str, ttl_ms: int) -> bool:
+    @property
+    def events(self) -> tuple[RedisCommandEvent, ...]:
+        return tuple(self._events)
+
+    def set_nx_px(
+        self,
+        key: str,
+        owner_token: str,
+        ttl_ms: int,
+        *,
+        client_id: str = "client",
+    ) -> bool:
+        self._record(client_id, "SET NX PX")
         if ttl_ms <= 0:
             raise ValueError("ttl_ms must be positive")
         self._purge_if_expired(key)
@@ -117,24 +155,76 @@ class InMemoryRedisStore:
         )
         return True
 
-    def get(self, key: str) -> str | None:
+    def get(self, key: str, *, client_id: str = "client") -> str | None:
+        self._record(client_id, "GET")
         self._purge_if_expired(key)
         record = self._records.get(key)
         if record is None:
             return None
         return record.owner_token
 
-    def delete(self, key: str) -> bool:
+    def delete(self, key: str, *, client_id: str = "client") -> bool:
+        self._record(client_id, "DEL")
         self._purge_if_expired(key)
         return self._records.pop(key, None) is not None
 
-    def compare_and_delete(self, key: str, owner_token: str) -> bool:
+    def counter_get(self, key: str, *, client_id: str) -> int:
+        self._record(client_id, "GET")
+        return self._counters.get(key, 0)
+
+    def counter_set(self, key: str, value: int, *, client_id: str) -> None:
+        self._record(client_id, "SET")
+        self._counters[key] = value
+
+    def counter_incr(self, key: str, *, client_id: str) -> int:
+        self._record(client_id, "INCR")
+        value = self._counters.get(key, 0) + 1
+        self._counters[key] = value
+        return value
+
+    def script_load(self, source: str, *, client_id: str = "client") -> str:
+        self._record(client_id, "SCRIPT LOAD")
+        digest = hashlib.sha1(
+            source.encode("utf-8"),
+            usedforsecurity=False,
+        ).hexdigest()
+        self._scripts[digest] = source
+        return digest
+
+    def script_flush(self, *, client_id: str = "operator") -> None:
+        self._record(client_id, "SCRIPT FLUSH")
+        self._scripts.clear()
+
+    def evalsha_compare_and_delete(
+        self,
+        digest: str,
+        key: str,
+        owner_token: str,
+        *,
+        client_id: str = "client",
+    ) -> bool:
+        source = self._scripts.get(digest)
+        if source is None:
+            self._record(client_id, "EVALSHA NOSCRIPT")
+            raise NoScriptError(f"script {digest} is not loaded")
+        if source != RELEASE_SCRIPT:
+            raise ValueError("the teaching model only executes the release script")
+        self._record(client_id, "EVALSHA GET-COMPARE-DEL")
         self._purge_if_expired(key)
         record = self._records.get(key)
         if record is None or record.owner_token != owner_token:
             return False
         del self._records[key]
         return True
+
+    def _record(self, client_id: str, command: str) -> None:
+        self._events.append(
+            RedisCommandEvent(
+                sequence=len(self._events) + 1,
+                client_id=client_id,
+                command=command,
+            )
+        )
 
     def _purge_if_expired(self, key: str) -> None:
         record = self._records.get(key)
@@ -148,9 +238,18 @@ class RedisStyleLockService:
     def __init__(self, store: InMemoryRedisStore, clock: SimulationClock) -> None:
         self._store = store
         self._clock = clock
+        self._release_script_sha = self._store.script_load(
+            RELEASE_SCRIPT,
+            client_id="lock-service",
+        )
 
     def acquire(self, key: str, owner_token: str, ttl_ms: int) -> RedisLockHandle | None:
-        if not self._store.set_nx_px(key, owner_token, ttl_ms):
+        if not self._store.set_nx_px(
+            key,
+            owner_token,
+            ttl_ms,
+            client_id=owner_token,
+        ):
             return None
         return RedisLockHandle(
             key=key,
@@ -159,10 +258,27 @@ class RedisStyleLockService:
         )
 
     def release_naive(self, handle: RedisLockHandle) -> bool:
-        return self._store.delete(handle.key)
+        return self._store.delete(handle.key, client_id=handle.owner_token)
 
     def release_compare_and_delete(self, handle: RedisLockHandle) -> bool:
-        return self._store.compare_and_delete(handle.key, handle.owner_token)
+        try:
+            return self._store.evalsha_compare_and_delete(
+                self._release_script_sha,
+                handle.key,
+                handle.owner_token,
+                client_id=handle.owner_token,
+            )
+        except NoScriptError:
+            self._release_script_sha = self._store.script_load(
+                RELEASE_SCRIPT,
+                client_id=handle.owner_token,
+            )
+            return self._store.evalsha_compare_and_delete(
+                self._release_script_sha,
+                handle.key,
+                handle.owner_token,
+                client_id=handle.owner_token,
+            )
 
 
 class UnfencedRelayStore:
@@ -371,6 +487,9 @@ __all__ = [
     "FencedScheduleLedger",
     "FencedStoredValue",
     "InMemoryRedisStore",
+    "NoScriptError",
+    "RELEASE_SCRIPT",
+    "RedisCommandEvent",
     "RedisLockHandle",
     "RedisStyleLockService",
     "RelayScheduler",

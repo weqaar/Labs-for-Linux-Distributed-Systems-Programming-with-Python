@@ -1,8 +1,9 @@
 # Lab 12 Echo Service
 
-This lab puts relay bytes through a real TCP stream on loopback and uses Scapy
-offline to show how one reader-supplied chat message becomes a TCP segment, an
-IPv4 packet and an Ethernet frame, then returns to application bytes.
+This lab puts relay bytes through real TCP and UDP sockets on loopback and uses
+Scapy offline to show how one reader-supplied chat message becomes a TCP
+segment or UDP datagram, an IPv4 packet and an Ethernet frame, then returns to
+application bytes.
 
 ## Lab role
 
@@ -11,11 +12,13 @@ IPv4 packet and an Ethernet frame, then returns to application bytes.
 - task fields: `task_id`, `definition`, `state`
 - task states: `queued`, `running`, `succeeded`, `failed`
 
-This lab keeps the payload textual and concentrates on the transport.
-The server and client both set explicit socket timeouts, the server shuts down
-cleanly, and the tests prove that TCP reads do not preserve write boundaries.
-The packet journey serializes and dissects bytes in memory. It does not send a
-raw frame, sniff an interface or require root.
+This lab keeps the payload textual and concentrates on transport contracts.
+The TCP tests prove that stream reads do not preserve write boundaries. The
+UDP tests preserve a datagram boundary, deliberately discard the first request
+and prove that a bounded application retry transmits a second copy. Both paths
+set explicit timeouts and shut down cleanly. The packet journey serializes and
+dissects bytes in memory. It does not send a raw frame, sniff an interface or
+require root.
 
 ## Getting started
 
@@ -30,27 +33,32 @@ Pass any non-empty UTF-8 text up to 1,024 encoded bytes:
 
 ```bash
 relay-packet-journey "hello from the reader" --view encapsulation
-relay-packet-journey "hello from the reader" --view decapsulation
-relay-packet-journey "hello from the reader" --view combined
+relay-packet-journey "Hello SigRaft" --transport tcp --view combined
+relay-packet-journey "Hello SigRaft" --transport udp --view combined
 ```
 
 The transmit view is top down:
 
 1. application message
-2. TCP segment
+2. TCP segment or UDP datagram
 3. IPv4 packet
 4. Ethernet frame
 
 The receive view is bottom up and removes those headers in reverse order. Each
 line reports the protocol data unit, total bytes, header bytes and important
-addresses or TCP fields. The following line prints the complete hexadecimal
-bytes at that stage. The combined view places the serialized wire frame between
-the transmit and receive traces.
+addresses or transport fields. TCP reports sequence and flags with a minimum
+20-byte header. UDP reports length and checksum with an 8-byte header. The
+following line prints the complete hexadecimal bytes at that stage. The
+combined view places the serialized wire frame between the transmit and receive
+traces.
 
 Scapy models protocol bytes. It does not emulate Linux 6.19 `sk_buff`,
 `net_device`, routing, neighbour discovery, TCP state, queueing, checksum
 offloads, segmentation, DMA or a NIC. The real `EchoServer` and `EchoClient`
-exercise the kernel's loopback TCP path with the same application bytes.
+exercise the kernel's loopback TCP path. `DatagramEchoServer` and
+`DatagramEchoClient` exercise UDP and make retry ownership visible. Retrying an
+echo is safe; a protocol with side effects also needs request identifiers and
+duplicate suppression.
 
 ## Quality gates
 
@@ -111,9 +119,14 @@ After the editable install, inspect both the socket service and packet model:
 [12, 32, 52, 66]
 >>> journey.decapsulation[-1].summary
 "'inspect this'"
+>>> udp = trace_chat_message("Hello SigRaft", transport="udp")
+>>> udp.encapsulation[1].unit
+'UDP datagram'
+>>> udp.encapsulation[1].header_bytes
+8
 >>> print(journey.render("decapsulation"))
 ```
 
-This path opens no socket. Use the loopback tests when debugging live
-`send`/`recv` behaviour and the packet journey when debugging layer fields or
-serialized bytes.
+This path opens no socket. Use the loopback tests when debugging live TCP
+`send`/`recv` or UDP `sendto`/`recvfrom` behavior, and use the packet journey
+when debugging layer fields or serialized bytes.

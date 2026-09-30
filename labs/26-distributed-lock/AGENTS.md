@@ -30,5 +30,8 @@ tests/                the test suite
   build, which is worse than no gate at all because it looks like coverage.
 - Keep the lock and scheduler tests deterministic. Use the in-memory clock and
   explicit lease stores instead of real Redis, Azure or wall-clock sleeps.
+- Keep the Redis teaching model explicit about its boundary: individual server
+  commands and Lua scripts serialize, while client-side command sequences can
+  interleave.
 - Install the public pybootstrap project and its gate tools through the lab's
   dev dependency.

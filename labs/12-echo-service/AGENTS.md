@@ -35,8 +35,10 @@ tests/                the test suite
   own table, so every tool stays usable on its own.
 - Do not add `|| true` to a CI check. It converts a broken gate into a green
   build, which is worse than no gate at all because it looks like coverage.
-- Packet-journey tests must serialize and dissect frames offline. Do not send
+- Packet-journey tests must serialize and dissect TCP and UDP frames offline. Do not send
   raw packets, sniff an interface, require root or depend on host addresses.
 - Keep Scapy distinct from the Linux datapath: it models protocol bytes for
   inspection and does not emulate `sk_buff`, `net_device`, routing, TCP state,
   offloads or a device driver.
+- UDP loss tests must discard a datagram inside the loopback test server. Do
+  not depend on firewall rules, timing races or external packet loss.

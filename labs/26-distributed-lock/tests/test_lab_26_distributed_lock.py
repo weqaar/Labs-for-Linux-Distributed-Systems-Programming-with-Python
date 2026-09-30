@@ -34,6 +34,32 @@ def test_naive_delete_can_remove_someone_elses_lock() -> None:
     assert store.get("relay:lock") is None
 
 
+def test_atomic_commands_do_not_make_a_client_sequence_atomic() -> None:
+    store = InMemoryRedisStore(SimulationClock())
+
+    value_a = store.counter_get("relay:attempts", client_id="worker-a")
+    value_b = store.counter_get("relay:attempts", client_id="worker-b")
+    store.counter_set("relay:attempts", value_a + 1, client_id="worker-a")
+    store.counter_set("relay:attempts", value_b + 1, client_id="worker-b")
+
+    assert store.counter_get("relay:attempts", client_id="observer") == 1
+    assert [event.command for event in store.events] == [
+        "GET",
+        "GET",
+        "SET",
+        "SET",
+        "GET",
+    ]
+
+
+def test_server_side_increment_is_one_atomic_command() -> None:
+    store = InMemoryRedisStore(SimulationClock())
+
+    assert store.counter_incr("relay:attempts", client_id="worker-a") == 1
+    assert store.counter_incr("relay:attempts", client_id="worker-b") == 2
+    assert [event.command for event in store.events] == ["INCR", "INCR"]
+
+
 def test_compare_and_delete_preserves_the_new_lock_holder() -> None:
     clock = SimulationClock()
     store = InMemoryRedisStore(clock)
@@ -47,6 +73,29 @@ def test_compare_and_delete_preserves_the_new_lock_holder() -> None:
     assert second is not None
     assert not service.release_compare_and_delete(first)
     assert store.get("relay:lock") == "token-b"
+
+
+def test_release_script_recovers_after_volatile_cache_is_flushed() -> None:
+    clock = SimulationClock()
+    store = InMemoryRedisStore(clock)
+    service = RedisStyleLockService(store, clock)
+    first = service.acquire("relay:lock", owner_token="token-a", ttl_ms=10)
+    assert first is not None
+
+    clock.advance(11)
+    second = service.acquire("relay:lock", owner_token="token-b", ttl_ms=10)
+    assert second is not None
+    store.script_flush()
+
+    assert not service.release_compare_and_delete(first)
+    assert store.get("relay:lock") == "token-b"
+    assert [event.command for event in store.events[-5:]] == [
+        "SCRIPT FLUSH",
+        "EVALSHA NOSCRIPT",
+        "SCRIPT LOAD",
+        "EVALSHA GET-COMPARE-DEL",
+        "GET",
+    ]
 
 
 def test_fenced_store_rejects_a_resumed_stale_writer() -> None:

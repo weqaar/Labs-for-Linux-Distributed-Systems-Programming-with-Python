@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from .simulation import (
+    RELEASE_SCRIPT,
     FencedLease,
     FencedLeaseManager,
     FencedRelayStore,
@@ -10,6 +11,8 @@ from .simulation import (
     FencedScheduleLedger,
     FencedStoredValue,
     InMemoryRedisStore,
+    NoScriptError,
+    RedisCommandEvent,
     RedisLockHandle,
     RedisStyleLockService,
     RelayScheduler,
@@ -33,6 +36,9 @@ __all__ = [
     "FencedScheduleLedger",
     "FencedStoredValue",
     "InMemoryRedisStore",
+    "NoScriptError",
+    "RELEASE_SCRIPT",
+    "RedisCommandEvent",
     "RedisLockHandle",
     "RedisStyleLockService",
     "RelayScheduler",

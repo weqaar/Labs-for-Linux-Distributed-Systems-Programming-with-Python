@@ -253,8 +253,9 @@ closing all three telemetry providers.
   gates, the Copier and executable build contracts, task-time semantics,
   object interfaces, tree and graph invariants, performance diagnostics,
   Python execution, multicore and NUMA contracts, typed query and CPython
-  instruction contracts, bounded stream buffering, offline TCP/IP packet
-  encapsulation and decapsulation, Celery and Valkey delivery, ZeroMQ,
+  instruction contracts, bounded stream buffering, TCP and UDP socket
+  contracts, offline TCP/IP and UDP/IP packet encapsulation and decapsulation,
+  Celery and Valkey delivery, ZeroMQ,
   WebSocket and GraphQL APIs, Bicep and AKS infrastructure, Nginx,
   autoscaling, disruption budgets, progressive delivery and the promoted
   digests. It also records OpenTelemetry export, the OpenStack/Kubernetes
@@ -278,7 +279,7 @@ closing all three telemetry providers.
 | 09 | `09-azure-sdk` | Moves cloud access onto SDK calls and managed credentials. |
 | 10 | `10-python-execution` | Connects source, AST, RISC-V ADD, bytecode, VM, and host architecture. |
 | 11 | `11-worker-pool` | Adds bounded workers, IPC queues, shared memory, multicore and NUMA evidence. |
-| 12 | `12-echo-service` | Establishes the socket loop and traces Ethernet, IPv4 and TCP encapsulation. |
+| 12 | `12-echo-service` | Compares TCP streams with UDP datagrams and traces both through Ethernet and IPv4. |
 | 13 | `13-packet-tools` | Adds packet inspection helpers for wire debugging. |
 | 14 | `14-native-extension` | Speeds a hot path with a native parser. |
 | 15 | `15-cpython-bytecode` | Adds typed task queries and a tested custom interpreter instruction. |
@@ -292,7 +293,7 @@ closing all three telemetry providers.
 | 23 | `23-quorum-basics` | Adds quorum reads and writes for shared state. |
 | 24 | `24-raft-election` | Elects a relay leader. |
 | 25 | `25-replicated-log` | Replicates the durable task log. |
-| 26 | `26-distributed-lock` | Coordinates maintenance with distributed locks. |
+| 26 | `26-distributed-lock` | Separates Redis command atomicity from client races, then adds owner tokens, Lua release and fencing. |
 | 27 | `27-stateless-service` | Splits stateless front ends from stored state. |
 | 28 | `28-partitioned-store` | Shards the store behind relay. |
 | 29 | `29-kv-store` | Persists relay state in a key-value layer. |

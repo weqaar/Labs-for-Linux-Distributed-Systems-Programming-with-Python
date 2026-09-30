@@ -48,15 +48,22 @@ GitHub, so a fresh clone receives the same quality runner used by every lab.
 
 ## Simulation focus
 
-The package models three coordination mechanisms with an in-memory clock:
+The package first models Redis's command-execution boundary:
+
+- two clients lose an update when each performs `GET` followed by `SET`
+- two server-side `INCR` commands preserve both updates
+- a parameterized Lua release script is cached by SHA-1, executes
+  compare-and-delete in one server turn, and reloads after `NOSCRIPT`
+
+It then models three coordination mechanisms with an in-memory clock:
 
 - Redis-style `SET NX PX` plus both naive and compare-delete release paths
 - a fenced lease manager that issues monotonic ownership tokens
 - an exactly-once scheduler ledger keyed by interval
 
-Tests prove the naive `DEL` bug, show the paused-holder corruption on an
-unfenced store, reject the same stale writer with fencing, and schedule exactly
-once per interval without live Redis or Azure.
+Tests prove the client-command race and naive `DEL` bug, show the paused-holder
+corruption on an unfenced store, reject the same stale writer with fencing, and
+schedule exactly once per interval without live Redis or Azure.
 
 For relay correctness I would deploy the fenced mechanism. Redis with expiry is
 acceptable when duplicate work is merely wasteful, not when an old holder can

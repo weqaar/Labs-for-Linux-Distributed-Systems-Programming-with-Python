@@ -342,11 +342,21 @@ def test_release_evidence_connects_the_earlier_product_checkpoints() -> None:
         ],
         "networkStack": [
             "tcp-byte-stream",
+            "udp-datagram-boundary",
+            "bounded-udp-retry",
             "scapy-ethernet-ip-tcp-round-trip",
+            "scapy-ethernet-ip-udp-round-trip",
             "top-down-encapsulation",
             "bottom-up-decapsulation",
         ],
         "taskTimeContract": ["UTC", "monotonic-deadline", "vector-clock"],
+        "coordinationContracts": [
+            "redis-serialized-command",
+            "client-sequence-interleaving",
+            "lua-script-cache-reload",
+            "owner-token-release",
+            "destination-fencing",
+        ],
         "backgroundWorkers": [
             "celery-json-task",
             "valkey-redis-transport",

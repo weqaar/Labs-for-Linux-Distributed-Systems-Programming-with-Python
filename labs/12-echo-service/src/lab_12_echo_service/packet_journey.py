@@ -9,7 +9,7 @@ import textwrap
 from dataclasses import dataclass
 from typing import Literal
 
-from scapy.layers.inet import IP, TCP
+from scapy.layers.inet import IP, TCP, UDP
 from scapy.layers.l2 import Ether
 from scapy.packet import Raw
 
@@ -17,6 +17,7 @@ _MAC_ADDRESS = re.compile(r"^(?:[0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}$")
 _MAX_MESSAGE_BYTES = 1024
 
 TraceView = Literal["encapsulation", "decapsulation", "combined"]
+TransportProtocol = Literal["tcp", "udp"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -66,6 +67,7 @@ class PacketJourney:
     """Transmit and receive views of the same serialized Ethernet frame."""
 
     message: str
+    transport: TransportProtocol
     payload: bytes
     frame: bytes
     encapsulation: tuple[LayerSnapshot, ...]
@@ -94,6 +96,7 @@ def trace_chat_message(
     source: PacketEndpoint | None = None,
     destination: PacketEndpoint | None = None,
     sequence: int = 1,
+    transport: TransportProtocol = "tcp",
 ) -> PacketJourney:
     """Encapsulate and decapsulate one UTF-8 message without network access."""
 
@@ -102,37 +105,68 @@ def trace_chat_message(
         raise ValueError("message must not be empty")
     if len(payload) > _MAX_MESSAGE_BYTES:
         raise ValueError(f"message must not exceed {_MAX_MESSAGE_BYTES} UTF-8 bytes")
+    if transport not in ("tcp", "udp"):
+        raise ValueError("transport must be tcp or udp")
     if not 0 <= sequence <= 0xFFFFFFFF:
         raise ValueError("sequence must fit in an unsigned 32-bit integer")
 
     sender = source or PacketEndpoint("02:00:00:00:00:01", "192.0.2.10", 41000)
     receiver = destination or PacketEndpoint("02:00:00:00:00:02", "198.51.100.20", 9000)
+    transport_layer = (
+        TCP(sport=sender.port, dport=receiver.port, flags="PA", seq=sequence)
+        if transport == "tcp"
+        else UDP(sport=sender.port, dport=receiver.port)
+    )
     packet = (
         Ether(src=sender.mac, dst=receiver.mac)
         / IP(src=sender.ip, dst=receiver.ip, ttl=64)
-        / TCP(sport=sender.port, dport=receiver.port, flags="PA", seq=sequence)
+        / transport_layer
         / Raw(load=payload)
     )
     frame = bytes(packet)
-    return decode_chat_frame(frame, expected_message=message)
+    return decode_chat_frame(
+        frame,
+        expected_message=message,
+        expected_transport=transport,
+    )
 
 
-def decode_chat_frame(frame: bytes, *, expected_message: str | None = None) -> PacketJourney:
-    """Dissect an Ethernet/IPv4/TCP frame and return both directional views."""
+def decode_chat_frame(
+    frame: bytes,
+    *,
+    expected_message: str | None = None,
+    expected_transport: TransportProtocol | None = None,
+) -> PacketJourney:
+    """Dissect an Ethernet/IPv4/TCP-or-UDP frame and return both views."""
 
     if len(frame) < 14:
         raise ValueError("frame is too short for an Ethernet header")
     parsed = Ether(frame)
     if not parsed.haslayer(IP):
         raise ValueError("frame does not contain IPv4")
-    if not parsed.haslayer(TCP):
-        raise ValueError("frame does not contain TCP")
-
     ip_layer = parsed[IP]
-    tcp_layer = parsed[TCP]
-    payload = bytes(tcp_layer.payload)
+    if parsed.haslayer(TCP):
+        transport: TransportProtocol = "tcp"
+        transport_layer = parsed[TCP]
+        transport_unit = "TCP segment"
+        transport_header_bytes = int(transport_layer.dataofs or 5) * 4
+        transport_details = (
+            f"seq={transport_layer.seq} flags={transport_layer.sprintf('%TCP.flags%')}"
+        )
+    elif parsed.haslayer(UDP):
+        transport = "udp"
+        transport_layer = parsed[UDP]
+        transport_unit = "UDP datagram"
+        transport_header_bytes = 8
+        transport_details = f"length={transport_layer.len} checksum={transport_layer.chksum:#06x}"
+    else:
+        raise ValueError("frame does not contain TCP or UDP")
+    if expected_transport is not None and transport != expected_transport:
+        raise ValueError(f"frame contains {transport.upper()}, not {expected_transport.upper()}")
+
+    payload = bytes(transport_layer[Raw].load) if transport_layer.haslayer(Raw) else b""
     if not payload:
-        raise ValueError("TCP segment does not contain chat data")
+        raise ValueError(f"{transport_unit} does not contain chat data")
     try:
         message = payload.decode("utf-8")
     except UnicodeDecodeError as exc:
@@ -141,21 +175,20 @@ def decode_chat_frame(frame: bytes, *, expected_message: str | None = None) -> P
         raise ValueError("decapsulated chat data does not match the sent message")
 
     ip_bytes = bytes(ip_layer)
-    tcp_bytes = bytes(tcp_layer)
+    transport_bytes = bytes(transport_layer)
     ip_header_bytes = int(ip_layer.ihl or 5) * 4
-    tcp_header_bytes = int(tcp_layer.dataofs or 5) * 4
     source = f"{parsed.src} -> {parsed.dst}"
-    route = f"{ip_layer.src}:{tcp_layer.sport} -> {ip_layer.dst}:{tcp_layer.dport}"
+    route = f"{ip_layer.src}:{transport_layer.sport} -> {ip_layer.dst}:{transport_layer.dport}"
 
     encapsulation = (
         _snapshot("encapsulation", "application", "message", payload, 0, repr(message)),
         _snapshot(
             "encapsulation",
             "transport",
-            "TCP segment",
-            tcp_bytes,
-            tcp_header_bytes,
-            f"seq={tcp_layer.seq} flags={tcp_layer.sprintf('%TCP.flags%')}",
+            transport_unit,
+            transport_bytes,
+            transport_header_bytes,
+            transport_details,
         ),
         _snapshot(
             "encapsulation",
@@ -163,7 +196,7 @@ def decode_chat_frame(frame: bytes, *, expected_message: str | None = None) -> P
             "IPv4 packet",
             ip_bytes,
             ip_header_bytes,
-            f"{ip_layer.src} -> {ip_layer.dst} protocol=TCP",
+            f"{ip_layer.src} -> {ip_layer.dst} protocol={transport.upper()}",
         ),
         _snapshot("encapsulation", "link", "Ethernet frame", frame, 14, source),
     )
@@ -175,19 +208,19 @@ def decode_chat_frame(frame: bytes, *, expected_message: str | None = None) -> P
             "IPv4 packet",
             ip_bytes,
             ip_header_bytes,
-            f"{ip_layer.src} -> {ip_layer.dst} protocol=TCP",
+            f"{ip_layer.src} -> {ip_layer.dst} protocol={transport.upper()}",
         ),
         _snapshot(
             "decapsulation",
             "transport",
-            "TCP segment",
-            tcp_bytes,
-            tcp_header_bytes,
+            transport_unit,
+            transport_bytes,
+            transport_header_bytes,
             route,
         ),
         _snapshot("decapsulation", "application", "message", payload, 0, repr(message)),
     )
-    return PacketJourney(message, payload, frame, encapsulation, decapsulation)
+    return PacketJourney(message, transport, payload, frame, encapsulation, decapsulation)
 
 
 def _snapshot(
@@ -215,14 +248,20 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Show a chat message being encapsulated and decapsulated."
     )
-    parser.add_argument("message", help="UTF-8 text to place in the TCP payload")
+    parser.add_argument("message", help="UTF-8 text to place in the transport payload")
+    parser.add_argument(
+        "--transport",
+        choices=("tcp", "udp"),
+        default="tcp",
+        help="transport header to model",
+    )
     parser.add_argument(
         "--view",
         choices=("encapsulation", "decapsulation", "combined"),
         default="combined",
     )
     args = parser.parse_args(argv)
-    journey = trace_chat_message(args.message)
+    journey = trace_chat_message(args.message, transport=args.transport)
     print(journey.render(args.view))
     return 0
 

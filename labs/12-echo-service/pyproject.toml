@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "lab-12-echo-service"
 version = "0.1.0"
-description = "Trace relay TCP bytes through sockets and an offline Scapy packet journey."
+description = "Compare relay TCP and UDP sockets with offline Scapy packet journeys."
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [{ name = "Weqaar Janjua", email = "weqaar.janjua@packetfive.com" }]

@@ -1,7 +1,8 @@
-"""Loopback TCP echo components for the relay checkpoint."""
+"""Loopback TCP and UDP echo components for the relay lab."""
 
 from __future__ import annotations
 
+from .datagram import DatagramEchoClient, DatagramEchoServer, DatagramExchange
 from .echo import EchoClient, EchoServer
 from .models import RelayTask, TaskState
 from .packet_journey import (
@@ -18,6 +19,9 @@ __all__ = [
     "__version__",
     "EchoClient",
     "EchoServer",
+    "DatagramEchoClient",
+    "DatagramEchoServer",
+    "DatagramExchange",
     "LayerSnapshot",
     "PacketEndpoint",
     "PacketJourney",

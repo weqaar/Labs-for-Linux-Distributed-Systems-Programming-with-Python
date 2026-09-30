@@ -72,6 +72,42 @@ def test_layer_sizes_show_each_header_being_added_and_removed() -> None:
     ]
 
 
+def test_udp_journey_uses_a_datagram_and_an_eight_byte_header() -> None:
+    journey = trace_chat_message("Hello SigRaft", transport="udp")
+    packet = Ether(journey.frame)
+    application, transport, internet, link = journey.encapsulation
+
+    assert journey.transport == "udp"
+    assert packet.haslayer(UDP)
+    assert not packet.haslayer(TCP)
+    assert transport.unit == "UDP datagram"
+    assert transport.header_bytes == 8
+    assert transport.total_bytes == application.total_bytes + 8
+    assert internet.summary.endswith("protocol=UDP")
+    assert link.total_bytes == len(journey.frame)
+    assert (
+        decode_chat_frame(
+            journey.frame,
+            expected_message="Hello SigRaft",
+            expected_transport="udp",
+        ).message
+        == "Hello SigRaft"
+    )
+
+
+def test_decode_ignores_ethernet_padding_after_udp_payload() -> None:
+    journey = trace_chat_message("Hello SigRaft", transport="udp")
+    padded_frame = journey.frame + bytes(60 - len(journey.frame))
+
+    decoded = decode_chat_frame(
+        padded_frame,
+        expected_message="Hello SigRaft",
+        expected_transport="udp",
+    )
+
+    assert decoded.payload == b"Hello SigRaft"
+
+
 def test_trace_views_show_separate_and_combined_directions() -> None:
     journey = trace_chat_message("show both ends")
 
@@ -138,6 +174,11 @@ def test_trace_rejects_unbounded_messages_and_sequences(
         trace_chat_message(message, sequence=sequence)
 
 
+def test_trace_rejects_an_unknown_transport() -> None:
+    with pytest.raises(ValueError, match="transport must be"):
+        trace_chat_message("Hello SigRaft", transport="sctp")  # type: ignore[arg-type]
+
+
 def test_decode_rejects_unsupported_or_malformed_frames() -> None:
     with pytest.raises(ValueError, match="too short"):
         decode_chat_frame(b"short")
@@ -148,14 +189,13 @@ def test_decode_rejects_unsupported_or_malformed_frames() -> None:
     with pytest.raises(ValueError, match="does not contain IPv4"):
         decode_chat_frame(arp_like)
 
-    udp = bytes(
+    unsupported = bytes(
         Ether(src="02:00:00:00:00:01", dst="02:00:00:00:00:02")
-        / IP(src="192.0.2.1", dst="198.51.100.1")
-        / UDP(sport=41000, dport=9000)
+        / IP(src="192.0.2.1", dst="198.51.100.1", proto=1)
         / Raw(load=b"chat")
     )
-    with pytest.raises(ValueError, match="does not contain TCP"):
-        decode_chat_frame(udp)
+    with pytest.raises(ValueError, match="does not contain TCP or UDP"):
+        decode_chat_frame(unsupported)
 
     empty_tcp = bytes(
         Ether(src="02:00:00:00:00:01", dst="02:00:00:00:00:02")
@@ -179,12 +219,15 @@ def test_decode_rejects_invalid_utf8_and_unexpected_message() -> None:
     journey = trace_chat_message("sent")
     with pytest.raises(ValueError, match="does not match"):
         decode_chat_frame(journey.frame, expected_message="received")
+    with pytest.raises(ValueError, match="contains TCP, not UDP"):
+        decode_chat_frame(journey.frame, expected_transport="udp")
 
 
 def test_cli_prints_requested_view(capsys: pytest.CaptureFixture[str]) -> None:
-    assert main(["reader supplied text", "--view", "decapsulation"]) == 0
+    assert main(["reader supplied text", "--transport", "udp", "--view", "decapsulation"]) == 0
 
     output = capsys.readouterr().out
     assert "RX DECAPSULATION (bottom up)" in output
+    assert "UDP datagram" in output
     assert "'reader supplied text'" in output
     assert "TX ENCAPSULATION" not in output

@@ -6,7 +6,15 @@ import socket
 
 import pytest
 
-from lab_12_echo_service import EchoClient, EchoServer, RelayTask, TaskState, __version__
+from lab_12_echo_service import (
+    DatagramEchoClient,
+    DatagramEchoServer,
+    EchoClient,
+    EchoServer,
+    RelayTask,
+    TaskState,
+    __version__,
+)
 
 
 def test_task_wire_round_trip_preserves_task_fields() -> None:
@@ -73,6 +81,52 @@ def test_server_shutdown_is_clean_and_stops_accepting_connections() -> None:
     assert not server.is_running()
     with pytest.raises(OSError):
         socket.create_connection(server.address, timeout=0.1)
+
+
+def test_udp_echo_preserves_one_datagram_boundary() -> None:
+    server = DatagramEchoServer(socket_timeout=0.05)
+    server.start()
+
+    try:
+        with DatagramEchoClient(*server.address, socket_timeout=0.1) as client:
+            exchange = client.exchange(b"Hello SigRaft")
+    finally:
+        server.close()
+
+    assert exchange.response == b"Hello SigRaft"
+    assert exchange.attempts == 1
+    assert server.received_datagrams == [b"Hello SigRaft"]
+    assert not server.is_running()
+
+
+def test_udp_reliability_requires_an_application_retry_policy() -> None:
+    server = DatagramEchoServer(socket_timeout=0.02, drop_first=True)
+    server.start()
+
+    try:
+        with DatagramEchoClient(*server.address, socket_timeout=0.5) as client:
+            exchange = client.exchange(b"Hello SigRaft", max_attempts=2)
+    finally:
+        server.close()
+
+    assert exchange.response == b"Hello SigRaft"
+    assert exchange.attempts == 2
+    assert server.received_datagrams == [b"Hello SigRaft", b"Hello SigRaft"]
+    assert not server.is_running()
+
+
+def test_udp_client_rejects_invalid_retry_arguments() -> None:
+    server = DatagramEchoServer()
+    server.start()
+
+    try:
+        with DatagramEchoClient(*server.address) as client:
+            with pytest.raises(ValueError, match="must not be empty"):
+                client.exchange(b"")
+            with pytest.raises(ValueError, match="must be positive"):
+                client.exchange(b"Hello SigRaft", max_attempts=0)
+    finally:
+        server.close()
 
 
 def test_version_is_exposed() -> None:
