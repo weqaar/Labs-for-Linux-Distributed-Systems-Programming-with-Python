@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 from html import escape
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib import resources
+from numbers import Real
 from pathlib import Path
 from threading import Event, RLock, Thread
 
@@ -155,8 +156,10 @@ def build_analysis_report(
     candidate = frame.loc[frame["release"] == releases[1], "duration_ms"].to_numpy(dtype=float)
     if len(baseline) < 2 or len(candidate) < 2:
         raise AnalysisError("each release requires at least two observations")
-    comparison = stats.mannwhitneyu(baseline, candidate, alternative="two-sided")
-    rank_biserial = 1.0 - (2.0 * float(comparison.statistic)) / (len(baseline) * len(candidate))
+    statistic, p_value = stats.mannwhitneyu(baseline, candidate, alternative="two-sided")
+    if not isinstance(statistic, Real) or not isinstance(p_value, Real):
+        raise AnalysisError("release comparison requires scalar test results")
+    rank_biserial = 1.0 - (2.0 * float(statistic)) / (len(baseline) * len(candidate))
 
     design = pd.get_dummies(
         frame[["queue_depth", "release", "region"]],
@@ -176,7 +179,7 @@ def build_analysis_report(
         generated_at=generated_at,
         summaries=summaries,
         mean_ci=(float(interval[0]), float(interval[1])),
-        mann_whitney_p=float(comparison.pvalue),
+        mann_whitney_p=float(p_value),
         rank_biserial=rank_biserial,
         r_squared=float(model.rsquared),
         residual_durbin_watson=float(durbin_watson(model.resid)),
@@ -188,7 +191,7 @@ def build_analysis_report(
         valid_rows=len(frame.index),
         summaries=summaries,
         mean_ci=(float(interval[0]), float(interval[1])),
-        mann_whitney_p=float(comparison.pvalue),
+        mann_whitney_p=float(p_value),
         rank_biserial_candidate_slower=rank_biserial,
         regression_r_squared=float(model.rsquared),
         durbin_watson=float(durbin_watson(model.resid)),

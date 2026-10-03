@@ -21,7 +21,18 @@ class ReadelfError(RuntimeError):
 
 
 def executable_format(path: str | os.PathLike[str]) -> ExecutableFormat:
-    """Return the executable format identified from *path*'s signatures."""
+    """Identify an executable from file signatures without executing it.
+
+    Args:
+        path: File to inspect, not a command to launch.
+
+    Returns:
+        ELF or PE for a recognised signature, otherwise UNKNOWN. Recognition
+        does not prove that the executable is complete, safe or runnable.
+
+    Raises:
+        OSError: If the file cannot be opened or read.
+    """
     with Path(path).open("rb") as stream:
         if stream.read(4) == b"\x7fELF":
             return ExecutableFormat.ELF
@@ -30,6 +41,7 @@ def executable_format(path: str | os.PathLike[str]) -> ExecutableFormat:
         if stream.read(2) != b"MZ":
             return ExecutableFormat.UNKNOWN
 
+        # PE stores the signature offset here, so an MZ prefix alone is insufficient.
         stream.seek(0x3C)
         offset_bytes = stream.read(4)
         if len(offset_bytes) != 4:
@@ -48,7 +60,21 @@ def readelf_headers(
     *,
     readelf: str = "readelf",
 ) -> str:
-    """Return the ELF file and program headers reported by readelf."""
+    """Read ELF headers with the selected readelf executable.
+
+    Args:
+        path: ELF file to inspect without executing its contents.
+        readelf: Trusted tool name or path, resolved by the process environment.
+
+    Returns:
+        The tool's unmodified standard output.
+
+    Raises:
+        ValueError: If the input does not carry an ELF signature.
+        FileNotFoundError: If the input file or selected tool is absent.
+        OSError: If the input cannot be read or the tool cannot be launched.
+        ReadelfError: If the launched tool returns a nonzero exit status.
+    """
     if executable_format(path) is not ExecutableFormat.ELF:
         raise ValueError("readelf requires an ELF executable")
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import doctest
 from typing import Any, cast
 
 from lab_21_websocket_service import (
@@ -18,7 +19,14 @@ from lab_21_websocket_service import (
     TaskState,
     __version__,
     graphql_websocket_round_trip,
+    stream,
 )
+
+
+def test_reconnect_docstring_is_executable() -> None:
+    result = doctest.testmod(stream, raise_on_error=True)
+    assert result.attempted >= 2
+    assert result.failed == 0
 
 
 def test_resume_replays_missed_events_and_streams_new_ones() -> None:

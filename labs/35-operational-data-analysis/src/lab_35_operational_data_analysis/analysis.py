@@ -11,6 +11,7 @@ rollback decision, not a forecast.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from numbers import Real
 from typing import cast
 
 import numpy as np
@@ -201,8 +202,10 @@ def compare_releases(frame: pd.DataFrame, baseline: str, candidate: str) -> Comp
     cand = frame.loc[frame["release"] == candidate, "duration_ms"].to_numpy(dtype=np.float64)
     if base.size == 0 or cand.size == 0:
         raise ValueError("both releases need at least one observation to compare")
-    result = stats.mannwhitneyu(base, cand, alternative="two-sided")
-    u_statistic = float(result.statistic)
+    statistic, p_value = stats.mannwhitneyu(base, cand, alternative="two-sided")
+    if not isinstance(statistic, Real) or not isinstance(p_value, Real):
+        raise ValueError("release comparison requires scalar test results")
+    u_statistic = float(statistic)
     # The rank-biserial correlation turns U into a signed effect size on a
     # -1..1 scale: 0 means the two samples are interleaved with no tendency
     # either way, and +-1 means every candidate observation beat (or lost
@@ -214,7 +217,7 @@ def compare_releases(frame: pd.DataFrame, baseline: str, candidate: str) -> Comp
         baseline_n=int(base.size),
         candidate_n=int(cand.size),
         u_statistic=u_statistic,
-        p_value=float(result.pvalue),
+        p_value=float(p_value),
         rank_biserial=float(rank_biserial),
     )
 

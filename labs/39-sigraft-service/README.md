@@ -8,6 +8,8 @@ evidence, both Azure and on-prem cloud targets, and offline checks for rollback,
 agent convergence and post-deploy verification.
 The runnable service uses OpenTelemetry SDK traces, metrics and correlated
 logs, plus validated transactional TOML hot reload.
+It now also offers an optional authenticated WebSocket listener and a tested,
+versioned Sphinx documentation site. HTTP remains the default CLI transport.
 
 Release evidence also retains the earlier FastAPI/Uvicorn/optional-uvloop
 boundary and the bounded Ray compute lab. The compact final HTTP process
@@ -44,6 +46,61 @@ sigraftctl --base-url http://127.0.0.1:8081 graphql \
 GraphQL returns operation errors beside its `data` member while HTTP status
 reports whether the endpoint accepted the transport request. Request bodies
 and list sizes remain bounded.
+
+## WebSocket commands and status updates
+
+Start the optional loopback listener with `--websocket-port 8082` and
+`--websocket-credentials /path/to/private-credentials.json`. It shares the HTTP
+service's job records but uses a separate port, so the existing HTTP listener
+and commands remain unchanged. The [usage guide](docs/usage.rst) shows how to
+generate private random credentials; do not put tokens in command arguments,
+URLs or source control.
+
+```bash
+sigraftctl --base-url ws://127.0.0.1:8082 \
+  --transport websocket --token-file "$HOME/.config/sigraft/ws-token" \
+  submit "count failed requests"
+sigraftctl --base-url ws://127.0.0.1:8082 \
+  --transport websocket --token-file "$HOME/.config/sigraft/ws-token" \
+  status task-1 --watch
+```
+
+Use the returned identifier, not necessarily `task-1`. Watch prints an initial
+snapshot, then real state changes from `SigRaftService.transition_task`.
+That method is for a trusted executor or the explicit REPL exercise, not a
+client command. The service does not yet execute submitted actions or provide
+output-file retrieval. Without an executor reporting changes, a job stays
+queued. Scheduler allocations remain a separate state model.
+
+The [protocol guide](docs/protocol.rst) defines `sigraft.jobs.v1`, request IDs,
+server-derived scopes, subscription limits and shutdown. It is not the
+GraphQL-specific subprotocol taught in Lab 21. WebSocket GraphQL requests use
+the same resolvers as HTTP; caller-supplied scopes cannot escalate access.
+No command is automatically retried after a disconnect. Reopen a watch for a
+current snapshot, not a replay of missed events.
+
+## Documenting and serving the Python API
+
+```bash
+python -m pip install -e ".[dev]"
+python -m sphinx -n -W --keep-going -b html docs build/docs/html
+python -m sphinx -W -b doctest docs build/docs/doctest
+python -m http.server --bind 127.0.0.1 --directory build/docs/html 8000
+```
+
+Open `http://127.0.0.1:8000/`, inspect the generated API and versioned footer,
+then stop the preview with Ctrl+C. The [documentation exercise](docs/documentation.rst)
+asks you to extend a public method's docstring, explain an invariant with an
+inline comment, and prove that a wrong example or reference fails the gate.
+Do not comment obvious assignments or duplicate type annotations in prose
+without explaining their meaning.
+
+The pytest gate builds HTML, executes doctests, tests broken documentation in
+temporary copies and retrieves the generated site over loopback HTTP.
+`pybootstrap check` must exit zero with all four gates executed. The release
+plans retain the docs as a commit-labelled artifact. Static hosting and
+external link checking are separate deployment steps, not claims made by the
+offline gate.
 
 ## Resource-aware scheduling
 
@@ -269,8 +326,8 @@ closing all three telemetry providers.
 | Stage | Lab | Product contribution |
 |---|---|---|
 | 01 | `01-first-service` | Starts the first relay process and request loop. |
-| 02 | `02-package-build` | Generates the relay contract and builds installable plus ELF and PE artifacts. |
-| 03 | `03-quality-gate` | Adds reproducible lint, type, and test gates. |
+| 02 | `02-package-build` | Builds packages, executable artifacts and a Sphinx API documentation site. |
+| 03 | `03-quality-gate` | Adds formatting, PEP conventions, type checks and executable documentation gates. |
 | 04 | `04-cli-tool` | Introduces the first `relayctl` command surface. |
 | 05 | `05-object-oriented-design` | Establishes domain values, interfaces, adapters, and polymorphic handlers. |
 | 06 | `06-trees-and-graphs` | Adds a balanced priority index, dependency DAG, and route graph. |
@@ -306,7 +363,7 @@ closing all three telemetry providers.
 | 36 | `36-on-prem-cloud` | Plans the configurable SigRaft on-prem cloud. |
 | 37 | `37-on-prem-cloud-apis` | Reconciles OpenStack, Kubernetes and registry resources through Python APIs. |
 | 38 | `38-resource-scheduling` | Adds resource admission, deterministic placement, reservations and node dispatch. |
-| 39 | `39-sigraft-service` | Assembles SigRaft, exposes REST and GraphQL, schedules jobs, exports telemetry, promotes one digest and proves rollback. |
+| 39 | `39-sigraft-service` | Assembles REST, GraphQL, optional WebSocket commands and status streams, scheduling, telemetry and versioned release documentation. |
 
 ## Quality gates
 

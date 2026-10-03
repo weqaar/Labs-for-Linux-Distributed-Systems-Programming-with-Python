@@ -6,7 +6,7 @@ import argparse
 import json
 import os
 import signal
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from json import JSONDecodeError
@@ -26,6 +26,7 @@ from lab_39_sigraft_service.config import (
     RequestLimits,
 )
 from lab_39_sigraft_service.graphql_api import SigRaftGraphQL, execute_http_payload
+from lab_39_sigraft_service.job_events import JobEvent, JobSubscription
 from lab_39_sigraft_service.redfish import RedfishInventory, default_inventory
 from lab_39_sigraft_service.scheduler import (
     SchedulerNode,
@@ -67,6 +68,8 @@ class SigRaftService:
     _tasks: dict[str, SigRaftTask] = field(default_factory=dict)
     _next_id: int = 1
     _task_lock: RLock = field(default_factory=RLock)
+    _subscriptions: set[JobSubscription] = field(default_factory=set)
+    _sequence: int = 0
     _request_counter: Any = field(init=False)
     _request_duration: Any = field(init=False)
 
@@ -108,9 +111,26 @@ class SigRaftService:
         }
 
     def submit_task(self, action: str, checkpoint: int | None = None) -> SigRaftTask:
-        """Store a new task in the queued state."""
+        """Store a queued job without executing its action.
+
+        Args:
+            action: Nonempty description bounded by the configured character limit.
+            checkpoint: Optional positive chapter checkpoint.
+
+        Returns:
+            An immutable job record. Its identifier is local to this process.
+
+        Raises:
+            ValueError: If the action or checkpoint violates the input contract.
+        """
 
         assert self.request_limits is not None
+        if not isinstance(action, str):
+            raise ValueError("action must be text")
+        if checkpoint is not None and (
+            isinstance(checkpoint, bool) or not isinstance(checkpoint, int) or checkpoint < 1
+        ):
+            raise ValueError("checkpoint must be a positive integer")
         cleaned = action.strip()
         if not cleaned:
             raise ValueError("action must not be empty")
@@ -126,6 +146,7 @@ class SigRaftService:
                 checkpoint=checkpoint,
             )
             self._tasks[task_id] = record
+            self._sequence += 1
             return record
 
     def get_task(self, task_id: str) -> SigRaftTask | None:
@@ -141,6 +162,53 @@ class SigRaftService:
             raise ValueError("first must be between 1 and 100")
         with self._task_lock:
             return tuple(self._tasks.values())[:first]
+
+    def transition_task(self, task_id: str, state: str) -> SigRaftTask:
+        """Record a trusted executor's state change and notify observers.
+
+        This method does not execute work. It is deliberately not a client
+        command: an observer cannot declare its own job successful.
+
+        Raises:
+            KeyError: If the job does not exist.
+            ValueError: If the transition is not queued to running, or running
+                to succeeded or failed.
+        """
+        allowed = {"queued": {"running"}, "running": {"succeeded", "failed"}}
+        with self._task_lock:
+            record = self._tasks[task_id]
+            if state not in allowed.get(record.state, set()):
+                raise ValueError(f"invalid transition from {record.state} to {state}")
+            updated = replace(record, state=state)
+            self._tasks[task_id] = updated
+            self._sequence += 1
+            event = JobEvent(self._sequence, asdict(updated))
+            for subscription in self._subscriptions:
+                if subscription.task_id == task_id:
+                    subscription.publish(event)
+            return updated
+
+    def subscribe_task(self, task_id: str) -> JobSubscription:
+        """Atomically subscribe and enqueue the current snapshot.
+
+        Raises:
+            KeyError: If the job does not exist.
+            ValueError: If the process already has 32 observers.
+        """
+        with self._task_lock:
+            record = self._tasks[task_id]
+            if len(self._subscriptions) >= 32:
+                raise ValueError("subscription capacity reached")
+            subscription = JobSubscription(task_id)
+            # The same lock protects transitions, closing the snapshot/live gap.
+            subscription.publish(JobEvent(self._sequence, asdict(record)))
+            self._subscriptions.add(subscription)
+            return subscription
+
+    def unsubscribe_task(self, subscription: JobSubscription) -> None:
+        """Release a subscription after completion, disconnect or overflow."""
+        with self._task_lock:
+            self._subscriptions.discard(subscription)
 
     def shutdown(self) -> None:
         """Stop managed reload and telemetry resources."""
@@ -544,8 +612,17 @@ def main(argv: list[str] | None = None) -> int:  # pragma: no cover
     parser.add_argument("--instance-id", default=os.getenv("SIGRAFT_INSTANCE_ID"))
     parser.add_argument("--poll-interval", default=2.0, type=float)
     parser.add_argument("--watch-config", action=argparse.BooleanOptionalAction, default=True)
+    parser.add_argument("--websocket-port", type=int)
+    parser.add_argument("--websocket-credentials", type=Path)
     args = parser.parse_args(argv)
+    if (args.websocket_port is None) != (args.websocket_credentials is None):
+        parser.error("--websocket-port and --websocket-credentials must be supplied together")
 
+    from lab_39_sigraft_service.websocket_transport import load_credentials, run_websocket_server
+
+    credentials = (
+        load_credentials(args.websocket_credentials) if args.websocket_credentials else None
+    )
     service = create_service(
         release_digest=args.digest,
         config_path=args.config,
@@ -558,9 +635,16 @@ def main(argv: list[str] | None = None) -> int:  # pragma: no cover
     assert watcher is not None
     previous = signal.signal(signal.SIGHUP, lambda signum, frame: watcher.request_reload())
     hosted = run_server(service, host=args.host, port=args.port)
+    websocket = None
     try:
+        if credentials is not None:
+            websocket = run_websocket_server(
+                service, credentials=credentials, port=args.websocket_port
+            )
         hosted.thread.join()
     finally:
+        if websocket is not None:
+            websocket.close()
         signal.signal(signal.SIGHUP, previous)
         hosted.close()
     return 0

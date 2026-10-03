@@ -18,7 +18,19 @@ async def graphql_websocket_round_trip(
     *,
     scopes: frozenset[str],
 ) -> tuple[dict[str, object], ...]:
-    """Run one GraphQL operation over a real graphql-transport-ws connection."""
+    """Run one GraphQL operation over a real graphql-transport-ws connection.
+
+    Args:
+        api: Shared domain-backed GraphQL schema.
+        document: Query or mutation sent as one operation, not an endless stream.
+        scopes: Trusted test permissions supplied to the server-side resolver.
+
+    Returns:
+        The acknowledgement, result and completion frames received by the client.
+
+    The ephemeral loopback listener and client are closed on exit. This helper
+    tests protocol negotiation, not TLS, browser authentication or durable replay.
+    """
 
     async def handler(connection: ServerConnection) -> None:
         initial = _decode(await connection.recv())

@@ -79,14 +79,18 @@ class GateReport:
 
     @property
     def failures(self) -> int:
+        """Return the number of completed gates that found problems."""
         return sum(result.outcome is GateOutcome.FAILED for result in self.results)
 
     @property
     def errors(self) -> int:
+        """Return the number of gates that did not complete a valid check."""
         return sum(result.outcome is GateOutcome.ERRORED for result in self.results)
 
     @property
     def exit_code(self) -> int:
+        """Return 2 for errors, otherwise 1 for findings or 0 for success."""
+        # Missing evidence outranks findings because an incomplete run cannot pass.
         if self.errors:
             return 2
         if self.failures:
@@ -94,6 +98,7 @@ class GateReport:
         return 0
 
     def to_junit_xml(self) -> str:
+        """Serialize every verdict as JUnit XML without writing to disk."""
         suite = ET.Element(
             "testsuite",
             {
@@ -129,6 +134,7 @@ class GateSuite:
     commands: tuple[GateCommand, ...]
 
     def run(self, runner: CommandRunner) -> GateReport:
+        """Run every command through the injected process boundary."""
         return GateReport(
             suite_name=self.suite_name,
             results=tuple(run_gate(command, runner) for command in self.commands),
@@ -139,6 +145,7 @@ class SubprocessRunner:
     """Run gate commands through `subprocess.run`."""
 
     def run(self, argv: tuple[str, ...]) -> ProcessResult:
+        """Execute argv without a shell and capture both output streams."""
         completed = subprocess.run(argv, capture_output=True, check=False, text=True)
         return ProcessResult(
             exit_code=completed.returncode,
@@ -149,7 +156,6 @@ class SubprocessRunner:
 
 def relay_quality_suite() -> GateSuite:
     """Return the default relay gate suite for the product checkpoints."""
-
     return GateSuite(
         suite_name="relay-quality",
         commands=(
@@ -178,8 +184,26 @@ def relay_quality_suite() -> GateSuite:
 
 
 def run_gate(command: GateCommand, runner: CommandRunner) -> GateResult:
-    """Execute one gate and map shell semantics to pass, fail or error."""
+    """Execute a gate under the lab's explicit exit-code convention.
 
+    Args:
+        command: Named check with its argument vector and purpose.
+        runner: Process adapter or deterministic fake implementing CommandRunner.
+
+    Returns:
+        A verdict mapping 0 to passed, 1 to failed and all other statuses to
+        errored. A missing executable is errored with no process exit code.
+
+    Raises:
+        OSError: If launching fails for a reason other than a missing executable.
+
+    Examples:
+        Inspect the deterministic gate list without launching its commands.
+
+        >>> from lab_03_quality_gate.quality import relay_quality_suite
+        >>> relay_quality_suite().commands[0].name
+        'format'
+    """
     try:
         result = runner.run(command.argv)
     except FileNotFoundError as error:

@@ -15,6 +15,11 @@ stages:
         steps:
           - script: make structure
           - script: make labs
+          - script: python -m sphinx -n -W --keep-going -b html docs build/docs/html
+            workingDirectory: labs/39-sigraft-service
+            displayName: Build versioned service documentation
+          - publish: labs/39-sigraft-service/build/docs/html
+            artifact: sigraft-docs-$(Build.SourceVersion)
           - script: python -m lab_39_sigraft_service.release verify-evidence --evidence $(evidenceFile) --commit $(Build.SourceVersion)
   - stage: Infrastructure
     dependsOn: Quality

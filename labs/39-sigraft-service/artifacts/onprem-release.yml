@@ -12,6 +12,8 @@ stages:
     commands:
       - [make, structure]
       - [make, labs]
+      - [python, -m, sphinx, -n, -W, --keep-going, -b, html, labs/39-sigraft-service/docs, labs/39-sigraft-service/build/docs/html]
+      - [python, -m, tarfile, -c, "sigraft-docs-{commit}.tar", labs/39-sigraft-service/build/docs/html]
       - [python, -m, lab_39_sigraft_service.release, verify-evidence, --evidence, artifacts/release-evidence.json, --commit, "{commit}"]
   - stage: BuildOnce
     dependsOn: [Quality]

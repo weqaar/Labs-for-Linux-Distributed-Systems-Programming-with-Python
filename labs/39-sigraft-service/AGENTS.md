@@ -50,6 +50,12 @@ tests/                the test suite
   fencing contracts.
 - The runnable service must keep REST and GraphQL on the same task methods.
   GraphQL operation errors remain distinct from HTTP transport failures.
+- The optional WebSocket listener shares those methods. Never trust a
+  caller-supplied scope, retry a submission after disconnect, or fabricate job
+  progress. Snapshot registration and transitions use the same lock.
+- Documentation builds and doctests run inside pytest. Keep API docstrings,
+  private-token setup, transport limits and release instructions aligned with
+  the installed implementation. Do not claim the local preview is a host.
 - Resource scheduling must reserve capacity before node-specific dispatch and
   must reject placement changes from a non-leader.
 - Do not add `|| true` to a CI check. It converts a broken gate into a green

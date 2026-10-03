@@ -24,7 +24,7 @@ Applications export OTLP to `http://127.0.0.1:4318` or
 metrics to Prometheus and logs to Loki. Grafana has all three data sources
 preconfigured so a trace ID can connect a request span to its logs and metrics.
 The SigRaft container mounts
-`labs/38-sigraft-service/config.example.toml` at
+`labs/39-sigraft-service/config.example.toml` at
 `/etc/sigraft/config.toml`. That example selects the collector's OTLP gRPC
 receiver. Edit the host file and the managed watcher validates and applies its
 live fields. Send `SIGHUP` to request an immediate reload without waiting for
@@ -37,6 +37,13 @@ curl --fail http://127.0.0.1:8080/metadata
 
 The mounted file contains no secrets. Use a deployment-specific protected
 configuration source for Azure Monitor connection data.
+
+The Compose profile retains HTTP-only access by default. For the optional
+WebSocket CLI exercise, run the final lab directly on the host using its
+[private-token setup and listener instructions](../labs/39-sigraft-service/docs/usage.rst).
+The WebSocket listener binds to loopback; publishing a container port alone
+does not expose that listener. A deployed WebSocket route needs a deliberately
+configured proxy in the same network namespace and a TLS boundary.
 
 Stop the stack without deleting its volumes:
 

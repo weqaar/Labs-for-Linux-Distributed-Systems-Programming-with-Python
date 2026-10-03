@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 from datetime import datetime, timezone
 from pathlib import Path
+from unittest.mock import patch
 from urllib.request import urlopen
 
 import pandas as pd
@@ -37,6 +38,15 @@ def test_packaged_observations_produce_all_statistics_and_deterministic_report()
     assert "<svg" in first.html
     assert "NumPy" in first.html
     assert "statsmodels" in first.html
+
+
+@pytest.mark.parametrize("result", [([1.0], 0.5), (1.0, [0.5])])
+def test_analysis_rejects_nonscalar_results(result: tuple[object, object]) -> None:
+    with (
+        patch("lab_39_sigraft_service.analytics_service.stats.mannwhitneyu", return_value=result),
+        pytest.raises(AnalysisError, match="scalar test results"),
+    ):
+        build_analysis_report("package:observations.csv")
 
 
 @pytest.mark.parametrize("duration", [float("nan"), float("inf"), -1.0])

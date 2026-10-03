@@ -8,7 +8,7 @@ services:
     command:
       - python
       - -m
-      - lab_38_sigraft_service.sigraft_service
+      - lab_39_sigraft_service.sigraft_service
       - --host
       - 0.0.0.0
       - --port
@@ -24,7 +24,7 @@ services:
       - --poll-interval
       - "2"
     volumes:
-      - ../labs/38-sigraft-service/config.example.toml:/etc/sigraft/config.toml:ro
+      - ../labs/39-sigraft-service/config.example.toml:/etc/sigraft/config.toml:ro
     ports:
       - "127.0.0.1:${SIGRAFT_PORT:-8080}:8080"
     read_only: true

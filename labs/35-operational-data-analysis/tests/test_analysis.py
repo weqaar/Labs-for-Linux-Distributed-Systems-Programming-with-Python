@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from unittest.mock import patch
 
 import numpy as np
 import pytest
@@ -193,6 +194,21 @@ def test_compare_releases_reports_no_effect_for_identical_distributions() -> Non
     frame = observations_to_frame(baseline + candidate)
     result = compare_releases(frame, "baseline", "candidate")
     assert abs(result.rank_biserial) < 0.5
+
+
+@pytest.mark.parametrize("result", [([1.0], 0.5), (1.0, [0.5])])
+def test_compare_releases_rejects_nonscalar_results(result: tuple[object, object]) -> None:
+    frame = observations_to_frame(
+        (
+            make_observation(offset_seconds=0, task_id="task-1", release="base", duration_ms=1),
+            make_observation(offset_seconds=1, task_id="task-2", release="next", duration_ms=2),
+        )
+    )
+    with (
+        patch("lab_35_operational_data_analysis.analysis.stats.mannwhitneyu", return_value=result),
+        pytest.raises(ValueError, match="scalar test results"),
+    ):
+        compare_releases(frame, "base", "next")
 
 
 def test_compare_releases_requires_both_releases_present() -> None:

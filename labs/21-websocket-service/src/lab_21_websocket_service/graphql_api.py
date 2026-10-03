@@ -129,12 +129,16 @@ class RelayGraphQL:
     ) -> AsyncIterator[ExecutionResult]:
         """Start a GraphQL subscription over the retained event sequence."""
 
-        result = await subscribe(
+        import inspect
+
+        result = subscribe(
             self.schema,
             parse(document),
             variable_values=variables,
             context_value={"scopes": scopes},
         )
+        if inspect.isawaitable(result):
+            result = await result
         if isinstance(result, ExecutionResult):
             raise GraphQLError(str(result.errors))
         return result

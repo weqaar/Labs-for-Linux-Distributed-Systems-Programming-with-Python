@@ -95,6 +95,13 @@ class ReleaseEvidence:
             raise ArtifactValidationError("release evidence must declare the image repository")
         required_components: dict[str, object] = {
             "projectTemplate": "copier",
+            "documentation": [
+                "sphinx-autodoc",
+                "strict-reference-build",
+                "executable-doctests",
+                "loopback-preview",
+                "versioned-docs-artifact",
+            ],
             "executableFormats": ["ELF", "PE"],
             "objectModel": [
                 "dataclass-slots",
@@ -187,6 +194,8 @@ class ReleaseEvidence:
                 "graphql-query-mutation",
                 "graphql-subscription",
                 "graphql-http-endpoint",
+                "authenticated-websocket-commands",
+                "bounded-job-status-watch",
             ],
             "resourceScheduling": [
                 "typed-resource-request",
@@ -406,6 +415,24 @@ def validate_pipeline_definition(pipeline: dict[str, Any]) -> None:
             raise ArtifactValidationError(f"pipeline is missing the {expected} stage")
 
     quality_scripts = stage_scripts(pipeline, "Quality")
+    quality_jobs = _expect_list(_stage(pipeline, "Quality").get("jobs"), "quality jobs")
+    docs_steps = [
+        _expect_mapping(step, "quality step")
+        for job in quality_jobs
+        for step in _expect_list(_expect_mapping(job, "quality job").get("steps"), "quality steps")
+    ]
+    docs_script = "python -m sphinx -n -W --keep-going -b html docs build/docs/html"
+    if not any(
+        step.get("script") == docs_script
+        and step.get("workingDirectory") == "labs/39-sigraft-service"
+        and not step.get("continueOnError")
+        for step in docs_steps
+    ) or not any(
+        step.get("publish") == "labs/39-sigraft-service/build/docs/html"
+        and step.get("artifact") == "sigraft-docs-$(Build.SourceVersion)"
+        for step in docs_steps
+    ):
+        raise ArtifactValidationError("quality stage must build and retain versioned documentation")
     if "make structure" not in quality_scripts or "make labs" not in quality_scripts:
         raise ArtifactValidationError("quality stage must gate on make structure and make labs")
     if not any(
@@ -545,6 +572,33 @@ def validate_onprem_pipeline(pipeline: dict[str, Any]) -> None:
         for stage_name in required
         for command in onprem_stage_commands(pipeline, stage_name)
     ]
+    docs_commands = onprem_stage_commands(pipeline, "Quality")
+    docs_build = [
+        "python",
+        "-m",
+        "sphinx",
+        "-n",
+        "-W",
+        "--keep-going",
+        "-b",
+        "html",
+        "labs/39-sigraft-service/docs",
+        "labs/39-sigraft-service/build/docs/html",
+    ]
+    docs_archive = [
+        "python",
+        "-m",
+        "tarfile",
+        "-c",
+        "sigraft-docs-{commit}.tar",
+        "labs/39-sigraft-service/build/docs/html",
+    ]
+    if (
+        docs_build not in docs_commands
+        or docs_archive not in docs_commands
+        or docs_commands.index(docs_build) >= docs_commands.index(docs_archive)
+    ):
+        raise ArtifactValidationError("on-prem quality must build then archive documentation")
     if any(command[0] not in _ONPREM_PROGRAMS for command in commands):
         raise ArtifactValidationError("on-prem pipeline contains an unapproved executable")
     build_commands = onprem_stage_commands(pipeline, "BuildOnce")

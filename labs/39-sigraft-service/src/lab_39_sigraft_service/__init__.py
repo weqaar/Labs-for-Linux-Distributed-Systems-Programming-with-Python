@@ -53,9 +53,14 @@ from lab_39_sigraft_service.sigraft_service import (
     SigRaftTask,
     run_server,
 )
-from lab_39_sigraft_service.sigraftctl import SigRaftClient
+from lab_39_sigraft_service.sigraftctl import SigRaftClient, WebSocketClient
 from lab_39_sigraft_service.telemetry import ReloadableSampler, TelemetryRuntime
 from lab_39_sigraft_service.version import __version__
+from lab_39_sigraft_service.websocket_transport import (
+    HostedWebSocketServer,
+    load_credentials,
+    run_websocket_server,
+)
 
 __all__ = [
     "AnalysisError",
@@ -69,6 +74,7 @@ __all__ = [
     "FabricExecutorTask",
     "HostVerification",
     "HostedSigRaftServer",
+    "HostedWebSocketServer",
     "HttpHostProbe",
     "ManagedSystem",
     "ScheduledJob",
@@ -92,12 +98,15 @@ __all__ = [
     "TelemetryRuntime",
     "VerificationError",
     "VerificationSummary",
+    "WebSocketClient",
     "__version__",
     "build_analysis_report",
     "load_release_bundle",
+    "load_credentials",
     "onprem_stage_commands",
     "rollback_command",
     "run_server",
+    "run_websocket_server",
     "stage_scripts",
     "validate_pipeline_definition",
     "validate_onprem_pipeline",

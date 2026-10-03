@@ -295,6 +295,13 @@ def test_release_evidence_connects_the_earlier_product_checkpoints() -> None:
 
     assert evidence.component_evidence == {
         "projectTemplate": "copier",
+        "documentation": [
+            "sphinx-autodoc",
+            "strict-reference-build",
+            "executable-doctests",
+            "loopback-preview",
+            "versioned-docs-artifact",
+        ],
         "executableFormats": ["ELF", "PE"],
         "objectModel": [
             "dataclass-slots",
@@ -387,6 +394,8 @@ def test_release_evidence_connects_the_earlier_product_checkpoints() -> None:
             "graphql-query-mutation",
             "graphql-subscription",
             "graphql-http-endpoint",
+            "authenticated-websocket-commands",
+            "bounded-job-status-watch",
         ],
         "resourceScheduling": [
             "typed-resource-request",

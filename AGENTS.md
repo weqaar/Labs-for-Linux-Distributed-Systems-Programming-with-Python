@@ -8,11 +8,13 @@ Read the `AGENTS.md` inside a lab before changing that lab.
 These are the reader-facing labs for *Linux Distributed Systems Programming
 with Python*. The book source is private and must not be added here.
 
-The labs are independently runnable stages of one production-grade product,
-not unrelated examples. Labs 1 through 38 develop a distributed task service
+The labs are independently runnable stages of one job-management web service,
+not unrelated examples. Labs 1 through 38 develop its capabilities under the name
 named `relay`, operated through `relayctl`. Lab 39 assembles those contracts as
 the SigRaft REST and GraphQL service, resource scheduler, CLI, operational
-report and Azure and on-prem release paths.
+report and Azure and on-prem release paths. Its optional WebSocket listener
+shares job records with HTTP, but neither interface starts worker execution.
+Keep the documentation exercises and release guides aligned with these limits.
 
 Keep the product contract stable:
 

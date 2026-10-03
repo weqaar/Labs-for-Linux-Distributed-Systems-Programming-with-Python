@@ -73,6 +73,22 @@ carry type annotations, and Pyright must pass without hiding errors.
 
 ## Documentation and dependencies
 
+- Give public modules, classes, functions, methods and properties docstrings
+  describing their API contract. State units, constraints, return semantics,
+  side effects and relevant exceptions where callers need them. Type hints
+  describe shapes; they do not replace these promises.
+- Follow PEP 257's docstring structure and use Google-style sections for
+  arguments, results and exceptions when needed. Comments explain why a
+  non-obvious decision is necessary, not what the next statement plainly does.
+- Follow the repository's configured Ruff formatting and lint rules. PEP 8
+  recommends 79-character code lines; these labs intentionally choose 100 for
+  consistency. A formatter is not a certificate of complete PEP 8 compliance.
+  PEP 484 function annotations and PEP 526 variable annotations support static
+  checking, not runtime validation.
+- Practise the documentation workflow in `labs/02-package-build/docs/` and
+  `labs/03-quality-gate/docs/`, with executable examples in their documentation
+  tests. Those checkpoints declare Sphinx locally; other labs do not need a
+  documentation dependency merely to follow these writing rules.
 - Keep the lab README aligned with the capability the code actually proves.
   Distinguish deterministic gate evidence from optional live integration work.
 - Declare runtime and development dependencies in `pyproject.toml`; do not

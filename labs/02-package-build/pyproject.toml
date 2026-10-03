@@ -23,8 +23,10 @@ dev = [
   "pyright>=1.1",
   "pytest>=8",
   "pytest-cov>=5",
+  "sphinx>=7,<9",
   "twine>=5.1",
 ]
+docs-comparison = ["mkdocs>=1.6,<2"]
 
 [project.scripts]
 relayctl = "lab_02_package_build.cli:main"
@@ -63,7 +65,14 @@ src = ["src", "tests"]
 [tool.ruff.lint]
 # E and F are the pyflakes and pycodestyle core, I keeps imports sorted, UP
 # rewrites syntax that a newer Python made obsolete.
-select = ["E", "F", "I", "UP"]
+select = ["E", "F", "I", "UP", "D"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.per-file-ignores]
+# Apply docstring rules to the documented API, not every existing lab file.
+"!src/lab_02_package_build/binary.py" = ["D"]
 
 [tool.pyright]
 pythonVersion = "3.10"

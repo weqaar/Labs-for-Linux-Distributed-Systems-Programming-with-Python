@@ -51,6 +51,16 @@ class ReconnectPolicy:
             raise ValueError("jitter_spread_ms must not be negative")
 
     def delay_ms(self, *, attempt: int, client_id: str) -> int:
+        """Return the bounded base backoff plus deterministic client jitter.
+
+        ``attempt`` starts at zero. The returned value is milliseconds, not an
+        instruction to retry a non-idempotent command. A negative attempt raises
+        ``ValueError``. With jitter disabled, the cap is directly observable:
+
+        >>> policy = ReconnectPolicy(base_delay_ms=100, max_delay_ms=400, jitter_spread_ms=0)
+        >>> [policy.delay_ms(attempt=n, client_id="relayctl") for n in range(4)]
+        [100, 200, 400, 400]
+        """
         if attempt < 0:
             raise ValueError("attempt must not be negative")
         backoff = min(self.base_delay_ms * (2**attempt), self.max_delay_ms)
@@ -140,7 +150,13 @@ class InMemoryBroker:
 
 
 class RelayStreamSession:
-    """One WebSocket session with replay, keepalive and expiry checks."""
+    """One WebSocket session with replay, keepalive and expiry checks.
+
+    ``resume_after`` is the last applied sequence, not a wall-clock timestamp.
+    This model assumes a single-threaded publisher and retained broker history.
+    Its replay promise does not survive losing that history or replacing the
+    broker with a fresh in-memory object.
+    """
 
     def __init__(
         self,

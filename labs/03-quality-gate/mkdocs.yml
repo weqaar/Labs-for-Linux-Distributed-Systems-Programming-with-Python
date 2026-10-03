@@ -1,0 +1,7 @@
+site_name: Relay quality evidence comparison
+docs_dir: mkdocs
+site_dir: build/mkdocs
+theme:
+  name: mkdocs
+nav:
+  - Honest verdicts: index.md

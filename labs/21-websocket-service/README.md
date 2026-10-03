@@ -58,3 +58,20 @@ Inspect the schema and stream objects before opening a connection:
 
 Execute one authorized query in memory, inspect its `data` and `errors`, then
 compare that result with the real loopback WebSocket frames.
+
+## Documenting a streaming contract
+
+Inspect `help(lab.ReconnectPolicy.delay_ms)` and execute its examples. Extend
+one session method's docstring to identify the units, cursor meaning, expiry
+policy and cleanup responsibility. Explain why a reconnect delay does not grant
+permission to repeat a submitted job. Add an inline comment only where a
+non-obvious invariant needs explanation.
+
+The gate executes the reconnect-policy doctest. Change its expected cap in a
+temporary copy and confirm that the example fails, then restore it. The
+finishing condition remains `pybootstrap check` exiting zero.
+
+Lab 39 applies these concepts to optional CLI WebSocket commands and status
+watching. Its `sigraft.jobs.v1` protocol shares the live service methods with
+HTTP but uses fresh snapshots after reconnect, not this lab's retained-history
+replay model. Do not infer replay or worker execution from an open socket.
