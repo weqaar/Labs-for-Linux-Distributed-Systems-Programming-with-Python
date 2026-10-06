@@ -1,6 +1,6 @@
 # Lab 37 On Prem Cloud Apis
 
-Orientation for anyone, human or AI, working in this repository.
+Development and review guidance for this lab.
 
 ## Checks
 
@@ -9,9 +9,9 @@ pip install -e ".[dev]"
 pybootstrap check
 ```
 
-Exit code 1 means a gate found problems. Exit code 2 means a gate could not
-run, so nothing was checked. Treat 2 as more serious than 1: it says the
-tooling is broken, and a broken checker reports nothing while looking fine.
+Exit code 1 means a gate found problems. Exit code 2 means at least one gate
+could not produce a verdict. Other gates may still have useful results.
+Read the gate output, repair the failed tool or configuration, and rerun.
 
 ## Layout
 

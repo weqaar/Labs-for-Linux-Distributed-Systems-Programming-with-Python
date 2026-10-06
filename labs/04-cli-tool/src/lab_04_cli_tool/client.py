@@ -34,13 +34,17 @@ class RetryPolicy:
             raise ValueError("retry delays must not be negative")
 
     def delay(self, attempt: int, jitter: Callable[[float, float], float]) -> float:
-        """Return capped exponential backoff plus full jitter."""
+        """Return capped backoff seconds plus jitter drawn from zero to that backoff.
+
+        The attempt index starts at zero. With the default uniform jitter,
+        the total delay can reach twice max_delay; max_delay caps only backoff.
+        """
         backoff = min(self.base_delay * 2**attempt, self.max_delay)
         return backoff + jitter(0, backoff)
 
 
 class RelayClient:
-    """HTTP boundary used by relayctl."""
+    """Fetch task status over HTTP with configurable read retries."""
 
     RETRYABLE = frozenset({429, 502, 503, 504})
 

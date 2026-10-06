@@ -1,4 +1,4 @@
-"""Relay checkpoint 03: honest JUnit quality gate evidence."""
+"""Record relay quality-check outcomes as exit codes and JUnit XML."""
 
 from __future__ import annotations
 

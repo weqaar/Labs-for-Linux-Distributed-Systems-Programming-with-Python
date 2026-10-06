@@ -1,39 +1,102 @@
 # Lab 39 SigRaft Service
 
-This final lab assembles the contracts developed through the `relay`
-labs as the SigRaft service. It includes a runnable REST API, the `sigraftctl`
+This final lab applies the designs from the earlier labs to the
+SigRaft job-management web service. Those labs import their packages as
+`relay`. That name does not mean the program relays traffic. Lab 39 uses
+`sigraftctl` instead. It includes a runnable REST API, the `sigraftctl`
 client, a GraphQL endpoint, resource-aware job placement, release artifacts
-that prove the same digest reaches staging and production, OpenTelemetry
+that describe promotion of the same digest through staging and production, OpenTelemetry
 evidence, both Azure and on-prem cloud targets, and offline checks for rollback,
 agent convergence and post-deploy verification.
 The runnable service uses OpenTelemetry SDK traces, metrics and correlated
 logs, plus validated transactional TOML hot reload.
-It now also offers an optional authenticated WebSocket listener and a tested,
+It also offers an optional authenticated WebSocket listener and a tested,
 versioned Sphinx documentation site. HTTP remains the default CLI transport.
 
 Release evidence also retains the earlier FastAPI/Uvicorn/optional-uvloop
-boundary and the bounded Ray compute lab. The compact final HTTP process
-remains deliberately small; those entries show that their independently
-runnable labs passed rather than suggesting that Lab 39 replaces its server or
-starts a Ray cluster.
+adapter design and the bounded Ray compute lab. The compact final HTTP process
+remains deliberately small. Those entries list capabilities to check in the
+independently runnable labs; the checked-in JSON is not a fresh gate result.
+Lab 39 neither replaces its HTTP server with FastAPI nor starts a Ray cluster.
+
+## Goal and preparation
+
+Operate the supplied compact SigRaft job-orchestration web service and connect
+its responses to release checks. You will submit and read a job,
+compare interfaces, inspect configuration changes and test release files.
+The reference implementation is already present; the exercises extend tests
+and documentation rather than ask you to assemble 38 installed packages.
+
+Use Python 3.10 or later from this directory. Read
+[`CODING_STANDARDS.md`](../CODING_STANDARDS.md) and `AGENTS.md`.
+Create an isolated environment so this lab does not pick up command names installed by another lab.
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e ".[dev]"
+```
+
+The HTTP listener uses the standard library; graphql-core, websockets,
+OpenTelemetry and the numerical analysis packages are real runtime
+dependencies. PyYAML and TOML parsing support release/configuration artifacts.
+All dependencies are declared in `pyproject.toml`; Sphinx is a development
+tool and Azure Monitor is optional. Default tests need no Azure subscription,
+Docker or external collector, but loopback connections must be allowed.
+
+This service stores jobs and scheduler allocations in process memory. It does
+not execute submitted action text, recover jobs after process loss, elect a
+Raft leader or enforce returned node plans. Release artifact validation is not
+proof that a pipeline ran or a cloud rollout succeeded. Keep the listener on
+loopback unless a separately reviewed deployment supplies its trust boundary;
+the HTTP scope header in the examples is not authenticated identity.
+
+1. Start with the REPL example to inspect shared REST/GraphQL domain state.
+2. Run the compact service below in one terminal and the CLI in another
+   activated terminal. Use the returned task ID for status, not a guessed ID.
+3. Run `pytest -q tests/test_lab_39_sigraft_service.py tests/test_config.py`.
+   Compare transport results, scheduler plans and transactional reload failure.
+4. Build documentation and run its exercises. Optional WebSocket, telemetry
+   backends and platform deployment each require their own setup and evidence.
 
 ## Run the compact SigRaft service
 
+The checked-in configuration selects a Compose-network collector hostname.
+For this standalone offline exercise, create a local copy with in-memory
+telemetry rather than try to contact that collector:
+
 ```bash
+python - <<'PY'
+from pathlib import Path
+source = Path("config.example.toml").read_text()
+Path("config.local.toml").write_text(source.replace('exporter = "otlp"', 'exporter = "memory"'))
+PY
 python -m lab_39_sigraft_service.sigraft_service --port 8081 \
   --digest sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
-  --config config.example.toml --environment local
+  --config config.local.toml --environment local
+```
+
+In the second terminal:
+
+```bash
 python -m lab_39_sigraft_service.sigraftctl \
   --base-url http://127.0.0.1:8081 metadata
 python -m lab_39_sigraft_service.sigraftctl \
   --base-url http://127.0.0.1:8081 submit "inspect cluster"
 ```
 
-## REST and GraphQL over one task model
+The repeated `a` digest is an exercise value, not the digest of a built image.
+Metadata should report it, and submission should report a queued job.
+Run `sigraftctl --base-url http://127.0.0.1:8081 status` with the identifier
+the service returned. The state remains queued until trusted application
+code explicitly reports a transition.
 
-`POST /tasks` and `GET /tasks/{task_id}` remain the direct REST resource
-interface. `POST /graphql` exposes typed queries and mutations over the same
-`SigRaftService` methods, so validation and task state cannot drift between
+## REST and GraphQL
+
+`POST /tasks` and `GET /tasks/{task_id}` are the REST paths. The code calls a
+job identifier `task_id`.
+`POST /graphql` exposes typed queries and mutations over the same
+`SigRaftService` methods, so validation and job state cannot drift between
 interfaces. GraphQL reads require the `tasks:read` scope and mutations require
 `tasks:write`, supplied in the `X-SigRaft-Scopes` header.
 
@@ -51,7 +114,7 @@ and list sizes remain bounded.
 
 Start the optional loopback listener with `--websocket-port 8082` and
 `--websocket-credentials /path/to/private-credentials.json`. It shares the HTTP
-service's job records but uses a separate port, so the existing HTTP listener
+service's jobs but uses a separate port, so the existing HTTP listener
 and commands remain unchanged. The [usage guide](docs/usage.rst) shows how to
 generate private random credentials; do not put tokens in command arguments,
 URLs or source control.
@@ -81,6 +144,10 @@ current snapshot, not a replay of missed events.
 
 ## Documenting and serving the Python API
 
+The running interfaces need instructions that stay aligned with their Python
+methods. Build the supplied documentation, execute its examples and preview
+the generated pages locally:
+
 ```bash
 python -m pip install -e ".[dev]"
 python -m sphinx -n -W --keep-going -b html docs build/docs/html
@@ -91,7 +158,7 @@ python -m http.server --bind 127.0.0.1 --directory build/docs/html 8000
 Open `http://127.0.0.1:8000/`, inspect the generated API and versioned footer,
 then stop the preview with Ctrl+C. The [documentation exercise](docs/documentation.rst)
 asks you to extend a public method's docstring, explain an invariant with an
-inline comment, and prove that a wrong example or reference fails the gate.
+inline comment, and verify that a wrong example or reference fails the gate.
 Do not comment obvious assignments or duplicate type annotations in prose
 without explaining their meaning.
 
@@ -104,14 +171,22 @@ offline gate.
 
 ## Resource-aware scheduling
 
-The final service carries Lab 38's placement boundary through
+The final service implements a separate version of Lab 38's placement model through
 `/scheduler/nodes`, `/scheduler/jobs`, `/scheduler/run`, and
 `/scheduler/jobs/{task_id}`. Nodes report CPU, memory, GPU, label and NUMA
-inventory. The elected scheduler validates requests, excludes stale nodes,
+inventory. The configured leader identity gates placement; no election runs.
+The scheduler validates requests, excludes stale nodes,
 makes deterministic placements, records an allocation and returns a
 node-specific dispatch plan containing cgroup, CPU, memory, NUMA and GPU
-enforcement values. The queue transports that committed decision; it does not
-select the node.
+enforcement values. These are returned data, not actual cgroup enforcement or
+a broker publish. A future queue adapter would carry that decision to the
+selected node rather than choose a node itself.
+
+As in Lab 38, explicit CPU affinity is not checked against node inventory
+unless the NUMA filter removes the unknown CPU. The current implementation
+can return CPU 99 for a node reporting only CPUs 0 and 1. This is a validation
+gap, not a supported placement. Scheduler states such as `scheduled` and
+`cancelled` are distinct from the four states exposed for `/tasks`.
 
 ## Python REPL debugging session
 
@@ -120,6 +195,7 @@ starting a listener:
 
 ```pycon
 >>> import lab_39_sigraft_service as lab
+>>> lab.__name__, lab.__file__
 >>> service = lab.SigRaftService(release_digest="sha256:" + "a" * 64)
 >>> task = service.submit_task("inspect cluster")
 >>> (task.task_id, task.state)
@@ -133,8 +209,13 @@ starting a listener:
 >>> service.shutdown()
 ```
 
+The GraphQL query sees the same queued job created through the Python
+service method. Its enum spelling is uppercase in GraphQL, while the Python
+object uses lowercase; both describe the same state.
 Inspect `result.errors`, `service.scheduler`, and
 `service.config_manager.status` when an API or scheduling test fails.
+
+## Run with the shared local stack
 
 From the repository root, the same final lab runs with the shared local
 resource stack:
@@ -185,6 +266,17 @@ telemetry. Tests construct in-memory SDK exporters and readers. The example
 configuration selects OTLP over gRPC at `otel-collector:4317`, which is the
 collector service in `local/compose.yaml`.
 
+For direct Azure Monitor export, install the optional adapter:
+
+```bash
+pip install -e ".[azure]"
+```
+
+Then set `telemetry.exporter` to `azure` and provide
+`telemetry.azure_connection_string` through a protected configuration source.
+The adapter creates Azure Monitor trace, metric, and log exporters. Tests do
+not provide credentials or contact Azure.
+
 ## Operational analysis in the runnable service
 
 `GET /analysis` serves an HTML report generated with NumPy, pandas, Matplotlib,
@@ -193,7 +285,8 @@ offline. Set `analysis.observations_path` to a bounded CSV exported from the
 telemetry ingestion path for a real deployment. The fixed schema rejects extra
 columns, unsafe dimensions, malformed timestamps, and non-finite numbers.
 
-The report shows per-release count, failure rate, mean, median, p95, p99, and
+As in Lab 35, use the report to describe the recorded sample, not to infer
+that a release caused every observed difference. The report shows per-release count, failure rate, mean, median, p95, p99, and
 sample standard deviation. It also shows a t interval for the overall mean, a
 Mann-Whitney comparison with rank-biserial effect size, an OLS model, and a
 Durbin-Watson residual diagnostic. The standalone service is:
@@ -208,13 +301,23 @@ publishes it under one lock, retains the old report on refresh failure, and
 joins during shutdown. Metadata exposes status, row count, input revision, and
 refresh time, not the configured filesystem path.
 
+The optional `observation_probe.py` measures `POST /tasks` submission latency.
+Its `succeeded` outcome means submission succeeded, not that the job completed,
+and its queue-depth field is always zero rather than measured. Do not combine
+these rows with Lab 35's completed-attempt observations as if their durations
+and outcomes meant the same thing.
+
+The release-analysis command validates and reports a caller-supplied candidate
+digest; it does not establish which image produced the observations. A real
+promotion decision needs separate evidence linking the dataset to that image.
+
 ## Read-only Redfish inventory
 
 The final lab exposes a deliberately small data-centre inventory at
 `/redfish/v1/`, `/redfish/v1/Systems`, and
 `/redfish/v1/Systems/{system_id}`. It gives SREs one typed view of managed
 system identity, power state and health alongside service metadata. The local
-fixture represents one virtual rack node; a deployment composition root can
+fixture represents one virtual rack node; deployment startup code can
 replace it with inventory collected through the bounded Redfish client from
 Lab 37.
 
@@ -222,18 +325,11 @@ This endpoint is not a transparent BMC proxy and does not provide complete
 Redfish service conformance. It exposes no reset, power, firmware or account
 actions. Hardware-control credentials remain outside the SigRaft HTTP service.
 
-Install the optional direct Azure Monitor adapter with:
-
-```bash
-pip install -e ".[azure]"
-```
-
-Then set `telemetry.exporter` to `azure` and provide
-`telemetry.azure_connection_string` through a protected configuration source.
-The adapter creates Azure Monitor trace, metric, and log exporters. Tests do
-not provide credentials or contact Azure.
-
 ## Validated TOML and hot reload
+
+Change a request limit without losing the last valid configuration if the
+replacement is malformed. The reload mechanism prepares changes first, then
+publishes them together or restores the previous state.
 
 `config.example.toml` is a complete checked-in candidate. SigRaft rejects
 unknown fields, missing tables, unsupported schema versions, invalid exporter
@@ -288,8 +384,18 @@ request reload. The signal handler only sets thread events, while the managed
 thread performs file I/O and subsystem work.
 
 ```bash
-kill -HUP "$(cat /run/sigraft.pid)"
+kill -HUP PID
 ```
+
+Replace `PID` with the specific service process ID obtained from your terminal
+or process supervisor. This standalone command does not create a PID file.
+
+To exercise this path, change `telemetry.sample_ratio` in `config.local.toml`
+to another value between zero and one. Request reload and use the CLI
+`metadata` command to inspect the increased generation. Then try `2.0`:
+validation must reject it while the previous generation remains active.
+Restore the valid value before continuing. No backend is needed for this
+experiment with the in-memory exporter.
 
 Call `ConfigWatcher.request_reload()` when an administrative control plane
 already runs inside the process. Shutdown wakes and joins the watcher before
@@ -321,11 +427,17 @@ closing all three telemetry providers.
 - `src/lab_39_sigraft_service/fabric_executor.py` verifies deployed hosts and
   fails the stage when any host is wrong.
 
+These files are examples to validate and adapt, not records of a completed
+deployment. The self-hosted-agent playbook declares a service that runs
+`sigraft_agent`, but does not install that module. Supply and verify the agent
+before starting the declared service. The release JSON's commit and digests
+must be replaced with values from the actual build and its gate results.
+
 ## SigRaft product map
 
 | Stage | Lab | Product contribution |
 |---|---|---|
-| 01 | `01-first-service` | Starts the first relay process and request loop. |
+| 01 | `01-first-service` | Defines an offline in-memory lifecycle, without a listener or CLI. |
 | 02 | `02-package-build` | Builds packages, executable artifacts and a Sphinx API documentation site. |
 | 03 | `03-quality-gate` | Adds formatting, PEP conventions, type checks and executable documentation gates. |
 | 04 | `04-cli-tool` | Introduces the first `relayctl` command surface. |
@@ -338,7 +450,7 @@ closing all three telemetry providers.
 | 11 | `11-worker-pool` | Adds bounded workers, IPC queues, shared memory, multicore and NUMA evidence. |
 | 12 | `12-echo-service` | Compares TCP streams with UDP datagrams and traces both through Ethernet and IPv4. |
 | 13 | `13-packet-tools` | Adds packet inspection helpers for wire debugging. |
-| 14 | `14-native-extension` | Speeds a hot path with a native parser. |
+| 14 | `14-native-extension` | Compares Python and native framing behavior and records measurements. |
 | 15 | `15-cpython-bytecode` | Adds typed task queries and a tested custom interpreter instruction. |
 | 16 | `16-framed-protocol` | Frames traffic through a bounded ring buffer. |
 | 17 | `17-wire-format` | Defines versioned serialization for relay messages. |
@@ -347,26 +459,44 @@ closing all three telemetry providers.
 | 20 | `20-zeromq-patterns` | Adds real PUB/SUB sockets and Celery background work over Valkey. |
 | 21 | `21-websocket-service` | Adds resumable WebSockets and typed GraphQL operations. |
 | 22 | `22-logical-clocks` | Normalizes civil time and preserves causal order across replicas. |
-| 23 | `23-quorum-basics` | Adds quorum reads and writes for shared state. |
-| 24 | `24-raft-election` | Elects a relay leader. |
-| 25 | `25-replicated-log` | Replicates the durable task log. |
+| 23 | `23-quorum-basics` | Models quorum reads, writes and partitions. |
+| 24 | `24-raft-election` | Simulates terms, votes and leader selection. |
+| 25 | `25-replicated-log` | Simulates replication and commitment with retained in-memory state. |
 | 26 | `26-distributed-lock` | Separates Redis command atomicity from client races, then adds owner tokens, Lua release and fencing. |
 | 27 | `27-stateless-service` | Splits stateless front ends from stored state. |
-| 28 | `28-partitioned-store` | Shards the store behind relay. |
-| 29 | `29-kv-store` | Persists relay state in a key-value layer. |
-| 30 | `30-dag-engine` | Executes task dependencies as a DAG. |
-| 31 | `31-airflow-dags` | Orchestrates relay flows with scheduler DAGs. |
+| 28 | `28-partitioned-store` | Models placement, quorum visibility and concurrent versions. |
+| 29 | `29-kv-store` | Models Cosmos-like access, conditional writes and expiry. |
+| 30 | `30-dag-engine` | Simulates DAG attempts, concurrency bounds and failure propagation. |
+| 31 | `31-airflow-dags` | Defines an Airflow-style blueprint without a running scheduler. |
 | 32 | `32-container-deploy` | Adds local and AKS delivery, Nginx, scaling and versioned rollouts. |
 | 33 | `33-load-shedding` | Bounds queueing and retries under overload. |
 | 34 | `34-instrumented-service` | Adds telemetry, trace propagation, and diagnosis queries. |
 | 35 | `35-operational-data-analysis` | Turns observations into statistical summaries and a web report. |
 | 36 | `36-on-prem-cloud` | Plans the configurable SigRaft on-prem cloud. |
 | 37 | `37-on-prem-cloud-apis` | Reconciles OpenStack, Kubernetes and registry resources through Python APIs. |
-| 38 | `38-resource-scheduling` | Adds resource admission, deterministic placement, reservations and node dispatch. |
+| 38 | `38-resource-scheduling` | Models resource admission, placement, reservations and dispatch plans. |
 | 39 | `39-sigraft-service` | Assembles REST, GraphQL, optional WebSocket commands and status streams, scheduling, telemetry and versioned release documentation. |
 
 ## Quality gates
 
+The map describes independently runnable learning stages. A retained
+contract or artifact entry does not mean this process imports that package or
+implements every capability demonstrated there.
+
 ```bash
 pybootstrap check
 ```
+
+Finish when you can distinguish accepted jobs from executed jobs, interface
+results from scheduler plans, local telemetry emission from backend ingestion,
+and artifact checks from deployed release evidence. `pybootstrap check`
+must exit 0 with all configured gates run. Exit 1 means findings; exit 2
+means a gate could not run and supplied no verdict.
+
+Stop the HTTP service and documentation preview with Ctrl-C. Shut down REPL
+services to join managed threads and flush providers. Remove
+`config.local.toml` and private WebSocket credential files you created.
+If you started the shared stack, run `make local-down` from the repository
+root; remove volumes only if you intentionally want to discard their data.
+Clean up optional cloud resources with their owned deployment's teardown
+procedure. Do not publish the example digest or credentials as release evidence.

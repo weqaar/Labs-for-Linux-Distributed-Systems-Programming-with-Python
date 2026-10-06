@@ -31,7 +31,7 @@ class RelayTaskService:
 
     @validate_call
     def submit(self, submission: TaskSubmission) -> tuple[TaskStatus, TaskEvent]:
-        """Accept one task submission and create the queued task record."""
+        """Accept one job submission and create the queued job status."""
 
         status = TaskStatus(
             id=submission.id,

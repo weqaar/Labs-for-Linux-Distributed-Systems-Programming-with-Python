@@ -1,4 +1,4 @@
-"""Pinned CPython source and patch contracts for the optional source build."""
+"""Record the CPython source revision and check the optional build's patch text."""
 
 from __future__ import annotations
 
@@ -72,7 +72,7 @@ def build_plan(checkout: Path, jobs: int) -> tuple[BuildStep, ...]:
 
 
 def verify_patch_contract(patch: str) -> tuple[str, ...]:
-    """Require the educational patch to cover declaration, execution, and tests."""
+    """Check required patch markers without applying the patch or building CPython."""
 
     required = (
         "Python/bytecodes.c",

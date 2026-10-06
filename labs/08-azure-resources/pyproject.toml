@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "lab-08-azure-resources"
 version = "0.1.0"
-description = "Relay checkpoint 05: an idempotent Azure resource plan."
+description = "Plan Azure resources offline and inspect Bicep deployments in relay checkpoint 08."
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [{ name = "Weqaar Janjua", email = "weqaar.janjua@packetfive.com" }]

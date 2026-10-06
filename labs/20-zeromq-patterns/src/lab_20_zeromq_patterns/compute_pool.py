@@ -1,22 +1,13 @@
-"""Ray task and actor boundary for relay compute, on a single-node local cluster.
+"""Run relay work with Ray tasks and actors on a single-node local cluster.
 
-This is a distinct pattern from the Celery boundary in ``background_worker``.
-Celery sends a JSON message to a broker and a worker process picks it up
-later; the broker is a durable record only once its delivery is configured
-that way, a persistent message on a durable queue with a publisher confirm
-and a result backend policy that matches. Ray schedules a task or actor
-directly onto a cluster it is joined to and hands back an object reference
-immediately; there is no broker, and the object store, not a queue, holds
-the value until something asks for it.
+Unlike Celery's broker delivery, Ray schedules work on a joined cluster and
+returns an object reference. The result becomes available through that reference;
+there is no durable message queue here.
 
-Two things a broker gives you for free do not come from Ray on their own, and
-this module exists to be honest about both. First, an actor's state lives in
-the memory of one process on this node; it is not durable storage, only a
-single point every concurrent attempt for one task ID is forced through, which
-is enough for correctness but not for surviving that process's own death.
-Second, Ray retries the compute; it does not retry the request on your behalf
-if the process that submitted it is what dies. Both points are covered where
-they matter below.
+The ledger actor serializes reservations for each task ID, but stores them only
+in process memory. Losing the actor loses its reservations and recorded outcomes.
+Ray can retry configured compute failures; this module does not recover a
+submission after the submitting process dies.
 """
 
 from __future__ import annotations
@@ -73,22 +64,17 @@ class UnknownResourceLabelError(ValueError):
 
 @dataclass(frozen=True, slots=True)
 class RayComputeSettings:
-    """A single-node local Ray cluster: no external head, no live network peer.
+    """Settings for local Ray startup, pending work and ledger retention.
 
     ``ledger_name`` scopes the idempotency ledger actor. Pools built with the
     same name on the same cluster share one ledger and therefore share
-    dedupe and retry memory; a different name gets its own, independent
+    duplicate detection and retry counts; a different name gets its own, independent
     ledger on the same cluster.
 
-    ``allow_usage_stats`` defaults to false: the default offline gate forces
-    Ray's own supported opt-out (Ray Project, "Usage Stats Collection")
-    before starting a cluster, regardless of what the parent process's own
-    environment already has that variable set to, so the gate stays
-    deterministic. Setting it to true is a deliberate choice to leave that
-    variable as the parent environment already has it, including Ray's own
-    default of collecting anonymised usage statistics if nothing has opted
-    out; it is not itself a request to enable telemetry, only to stop
-    forcing it off.
+    ``allow_usage_stats=False`` disables Ray usage statistics during local
+    startup, even if the parent environment enables them. ``True`` leaves the
+    environment unchanged; it does not itself enable telemetry. Ray may then
+    use its default collection policy if no opt-out was supplied.
     """
 
     num_cpus: int = 2
@@ -135,20 +121,11 @@ class ReservationResult:
 def _usage_stats_override(*, allow_usage_stats: bool) -> Iterator[None]:
     """Force Ray's usage-stats opt-out for the scope of one cluster startup.
 
-    Ray collects anonymised usage statistics over the network by default
-    (Ray Project, "Usage Stats Collection"); ``RAY_USAGE_STATS_ENABLED=0`` is
-    its own supported way to disable that. It has to be set before
-    ``ray.init()`` starts the cluster's background processes, since those
-    processes inherit this value at the moment they are spawned; a plain
-    ``setdefault`` is not enough to make an offline gate deterministic, since
-    it leaves a parent environment that already set this variable to ``1``
-    unchanged. Forcing it here, unconditionally, unless the caller has
-    deliberately allowed usage stats, is what makes the choice deterministic
-    regardless of the parent process's own environment. This process's own
-    environment is not permanently changed by that: whatever value, or
-    absence of one, was present before this context is restored once
-    ``ray.init()`` inside it has returned, so only the cluster's own startup,
-    and the processes spawned from it, ever sees the forced value.
+    Set ``RAY_USAGE_STATS_ENABLED=0`` before ``ray.init()`` so its child
+    processes inherit the opt-out. ``setdefault`` would leave an existing
+    opt-in unchanged. Restore the previous value, or remove the variable if
+    absent before entry, when the context exits. If usage statistics are
+    allowed, leave the environment untouched.
     """
 
     previous = os.environ.get(_USAGE_STATS_ENV_VAR)
@@ -164,18 +141,12 @@ def _usage_stats_override(*, allow_usage_stats: bool) -> Iterator[None]:
 
 
 def start_local_cluster(settings: RayComputeSettings = RayComputeSettings()) -> None:
-    """Join a single-node local Ray cluster; a no-op if one is already running.
+    """Start a local Ray cluster unless this process is already connected.
 
-    ``ray.init()`` with no address starts Ray's own background processes, a
-    raylet, a GCS, a plasma object store, on this machine, which becomes the
-    cluster's head node (Ray Project, "Starting Ray"). That is several real
-    local processes, not one, and nothing here is a fake: the scheduler,
-    object store and worker processes are the real Ray runtime, sized down
-    for a deterministic test. Usage stats collection is forced off for the
-    scope of this call unless ``settings.allow_usage_stats`` deliberately
-    allows it, so joining this cluster makes no outbound telemetry request
-    of that kind by default, and that choice does not depend on the parent
-    process's own environment already being clean.
+    ``ray.init()`` starts real local scheduler, object-store and worker
+    processes; no external head node is needed. Force usage statistics off
+    during startup unless ``settings.allow_usage_stats`` is true. The caller
+    that starts the cluster is responsible for stopping it.
     """
 
     if ray.is_initialized():
@@ -198,26 +169,22 @@ def stop_local_cluster() -> None:
 
 
 def _fingerprint_of(submission: TaskSubmission) -> str:
-    """The part of a submission that must stay fixed for one task ID."""
+    """Return the action and target used to detect conflicting task submissions."""
 
     return f"{submission.action.value}:{submission.target}"
 
 
 class _LedgerState:
-    """The single point every concurrent attempt for one task ID passes through.
+    """Track task reservations, fingerprints and outcomes in process memory.
 
-    This is a plain, undecorated class, unit-testable directly in this
-    process, and wrapped as a Ray actor immediately below. What it holds is
-    process memory on one node, not durable storage: if the actor wrapping
-    it dies without a restart, everything it knows is gone with it. What it
-    provides is not durability but atomicity, Ray delivers an actor's calls
-    one at a time (Ray Project, "Actors"), so ``reserve`` below is the one
-    place a race between two submissions of the same task ID is actually
-    decided, whichever call it serves first wins, and the loser is told to
-    wait for that winner's outcome rather than run the action again. Entries
-    are bounded by ``max_entries``: the oldest entry that is not currently
-    in flight is forgotten once that bound is exceeded, so this actor's
-    memory does not grow without limit across a long-running pool.
+    The Ray actor wrapper serializes calls, so only one submission can reserve
+    a task ID at a time. Concurrent duplicates wait for its outcome; conflicting
+    action or target values are rejected. Direct callers of this plain class
+    must provide their own serialization.
+
+    Actor loss discards this state. Retention above ``max_entries`` evicts the
+    least recently touched entry that is not in flight. In-flight entries are
+    never evicted, so they can temporarily exceed the configured limit.
     """
 
     def __init__(self, max_entries: int) -> None:
@@ -265,7 +232,7 @@ class _LedgerState:
         return self._outcomes.get(task_id)
 
     def size(self) -> int:
-        """Entries currently retained, for the bounded-memory test."""
+        """Return the number of retained task entries, including in-flight work."""
 
         return len(self._order)
 
@@ -298,18 +265,11 @@ _IdempotencyLedger = ray.remote(num_cpus=0)(_LedgerState)
 
 
 def _run_action(submission: TaskSubmission, attempt: int) -> None:
-    """The relay action, with classified failures for the retry policy to see.
+    """Simulate an action outcome from the target suffix without accessing it.
 
-    A target ending in ``.part`` has not finished landing on its first
-    attempt; that is a dependency that is not ready yet, not a defect in the
-    request, so it raises the retryable error Ray is configured to catch. A
-    target ending in ``.missing`` fails validation and will not improve with
-    another attempt, the same rule the Celery section gives for input that is
-    simply wrong: record it as failed rather than retrying it. A target
-    ending in ``.slow`` pretends to take real wall time, which is what the
-    concurrent-duplicate test uses to hold a reservation open long enough to
-    prove a second, overlapping submission waits for it instead of running
-    the action a second time.
+    ``.part`` raises a retryable error on the first attempt; ``.missing`` always
+    raises a permanent error. ``.slow`` sleeps briefly so a duplicate submission
+    can overlap the reservation in a test. Other targets return immediately.
     """
 
     if submission.target.endswith(".missing"):
@@ -323,15 +283,11 @@ def _run_action(submission: TaskSubmission, attempt: int) -> None:
 def _await_settled_outcome(
     ledger: ActorHandle, task_id: str, *, poll_interval: float = 0.05, timeout: float = 2.0
 ) -> ComputeOutcome:
-    """Wait out another attempt already reserved for this task ID.
+    """Poll for another reserved attempt's outcome using this worker's slot.
 
-    This spends this worker's slot polling rather than doing useful work, a
-    real cost, not a free lock; it is correct only because ``reserve`` above
-    is the atomic decision point that guarantees exactly one attempt is ever
-    running the action for a given task ID at a time. If the winning attempt
-    takes longer than ``timeout``, this raises the retryable error instead of
-    hanging, so Ray's own retry schedules a fresh attempt that will see the
-    outcome once it exists.
+    ``poll_interval`` and ``timeout`` are seconds. If no outcome is observed
+    before the deadline, raise ``RetryableComputeError``. Ray may then schedule
+    another attempt, subject to the configured retry limit.
     """
 
     deadline = time.monotonic() + timeout
@@ -344,14 +300,12 @@ def _await_settled_outcome(
 
 
 def _execute(ledger: ActorHandle, submission: TaskSubmission) -> ComputeOutcome:
-    """The Ray task body: one atomic reservation, then the idempotent action.
+    """Reserve a task ID and run the simulated action or reuse its outcome.
 
-    A permanent failure is caught here and recorded as a relay ``failed``
-    outcome rather than left to propagate, so the pool's contract stays
-    ``succeeded`` or ``failed`` for every relay action regardless of which
-    library raised along the way. A transient failure releases the
-    reservation and is left to propagate: Ray's own ``retry_exceptions`` is
-    what schedules the next attempt.
+    Record ``PermanentComputeError`` as a ``failed`` outcome. Release the
+    reservation on ``RetryableComputeError`` and propagate it for Ray's retry
+    policy. Fingerprint conflicts and other exceptions also propagate; they
+    are not converted into job outcomes.
     """
 
     fingerprint = _fingerprint_of(submission)
@@ -385,18 +339,15 @@ def _execute(ledger: ActorHandle, submission: TaskSubmission) -> ComputeOutcome:
 
 
 class RelayComputePool:
-    """A bounded, typed adapter over Ray tasks for one relay checkpoint.
+    """Limit outstanding Ray tasks and share duplicate detection through an actor.
 
-    Submission is bounded: once ``max_pending`` results are outstanding,
-    ``submit`` blocks on the oldest one rather than growing an unbounded
-    queue, the same shape as the ZeroMQ high water mark and the Celery
-    prefetch multiplier, applied at the scheduler instead of a socket or a
-    broker. A second submission for a task ID already outstanding in this
-    pool reuses that same object reference instead of scheduling a duplicate
-    task; a submission for a task ID this pool is not currently tracking
-    still reaches the shared ledger, which is what makes the same guarantee
-    hold across two pool instances joined to one cluster, not just within
-    one.
+    At ``max_pending``, submission waits for a result to become ready before
+    scheduling more work. Collected results remain in memory until ``drain``;
+    callers should drain periodically to release them.
+
+    An identical submission already pending in this pool reuses its object
+    reference. Other submissions reach the named ledger shared by pools on the
+    same cluster. Replay is possible only while that ledger retains the entry.
     """
 
     def __init__(self, settings: RayComputeSettings = RayComputeSettings()) -> None:
@@ -421,7 +372,7 @@ class RelayComputePool:
     def submit(
         self, submission: TaskSubmission, *, resource_label: str | None = None
     ) -> ray.ObjectRef:
-        """Schedule one relay task, applying backpressure before its own."""
+        """Return a Ray object reference, waiting for capacity before scheduling."""
 
         if self._closed:
             raise ComputePoolClosedError("compute pool is shutting down")
@@ -452,7 +403,7 @@ class RelayComputePool:
             return ref
 
     def pending(self) -> frozenset[str]:
-        """Task IDs with an outstanding object reference, for the HWM test."""
+        """Return task IDs whose object references this pool has not collected."""
 
         with self._lock:
             return frozenset(self._pending.values())
@@ -460,14 +411,10 @@ class RelayComputePool:
     def drain(self) -> tuple[ComputeOutcome, ...]:
         """Wait for every outstanding reference and return every outcome.
 
-        This includes outcomes already collected by backpressure inside
-        ``submit``: a result reclaimed to make room for the next submission
-        is still a result, not a dropped message the way a PUB socket past
-        its high water mark drops one. Bookkeeping for the refs in this
-        batch is cleared in ``finally``: a task that raised, such as a
-        propagated :class:`TaskFingerprintConflictError`, must not be left
-        behind as a permanently pending reference that poisons every later
-        call to ``drain`` or ``shutdown``. The error itself still propagates.
+        Include outcomes collected while ``submit`` waited for capacity, sorted
+        by task ID. Clear pending references even if collecting a result raises,
+        so later calls do not repeatedly wait on the same failed reference.
+        Propagate the error rather than returning a partial result tuple.
         """
 
         with self._lock:
@@ -485,7 +432,7 @@ class RelayComputePool:
             return tuple(sorted(outcomes, key=lambda outcome: outcome.id))
 
     def ledger_size(self) -> int:
-        """Entries the shared ledger actor currently retains."""
+        """Return the number of task entries retained by the shared ledger actor."""
 
         return cast(int, ray.get(self._ledger.size.remote()))
 

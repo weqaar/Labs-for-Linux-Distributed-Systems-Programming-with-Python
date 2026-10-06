@@ -1,4 +1,4 @@
-"""Civil-time parsing and presentation for relay task records."""
+"""Civil-time parsing and presentation for SigRaft job status."""
 
 from __future__ import annotations
 

@@ -1,8 +1,8 @@
 # Lab 08 Azure Resources
 
-Checkpoint 08 of the relay product. This lab replaces the greeting scaffold
-with an offline desired-state planner for the Azure resources behind relay's
-`/tasks` API.
+Checkpoint 08 models the Azure resources intended to support relay's
+`/tasks` API. Its offline planner compares desired resources with in-memory
+state; separate Bicep files support optional live deployments.
 
 ## Checks
 
@@ -11,14 +11,15 @@ pip install -e ".[dev]"
 pybootstrap check
 ```
 
-Exit code 1 means a gate found problems. Exit code 2 means a gate could not
-run, so nothing was checked. Treat 2 as more serious than 1: it says the
-tooling is broken, and a broken checker reports nothing while looking fine.
+Exit code 1 means a gate found problems. Exit code 2 means at least one gate
+could not produce a verdict. Other gates may still have useful results.
+Inspect the diagnostics, repair the affected check and rerun it before
+reporting success.
 
 ## Checkpoint focus
 
 - plan relay resource group, storage, queue and identity state offline
-- prove repeat apply is idempotent and teardown order is safe
+- check that a second model apply makes no changes and deletion reverses dependencies
 - keep control-plane and data-plane RBAC separate in the model
 - keep Bicep split into a resource-group main file and focused storage and
   platform modules
@@ -47,4 +48,4 @@ pytest
 - Gate settings live in `[tool.pybootstrap]`. Tool settings live in each tool's
   own table, so every tool stays usable on its own.
 - Do not add `|| true` to a CI check. It converts a broken gate into a green
-  build, which is worse than no gate at all because it looks like coverage.
+  build, hiding the failed check from the pipeline.

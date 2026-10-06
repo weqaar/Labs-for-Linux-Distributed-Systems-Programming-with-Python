@@ -8,7 +8,7 @@ from enum import Enum
 
 
 class JobState(str, Enum):
-    """Lifecycle states persisted for one SigRaft job."""
+    """Lifecycle states retained in memory for one scheduled SigRaft job."""
 
     QUEUED = "queued"
     SCHEDULED = "scheduled"
@@ -120,7 +120,7 @@ class ProjectQuota:
 
 @dataclass(frozen=True, slots=True)
 class Job:
-    """Persisted scheduler state for one submitted task."""
+    """In-memory scheduler state for one submitted task."""
 
     job_id: str
     project: str
@@ -243,7 +243,7 @@ class ResourceScheduler:
         priority: int = 0,
         max_attempts: int = 1,
     ) -> Job:
-        """Validate and persist a queued job."""
+        """Validate and store a queued job in memory."""
 
         if not _valid_job_id(job_id):
             raise ValueError("job_id must match task-<positive integer>")
@@ -381,7 +381,7 @@ class ResourceScheduler:
         return tuple(recovered)
 
     def job(self, job_id: str) -> Job:
-        """Return a persisted job."""
+        """Return a stored job by task ID."""
 
         return self._job(job_id)
 

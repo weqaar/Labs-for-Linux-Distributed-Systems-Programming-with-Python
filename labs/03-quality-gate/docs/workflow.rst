@@ -26,7 +26,8 @@ Nitpicky mode checks missing object targets, ``-W`` fails on warnings and
 ``--keep-going`` gathers remaining diagnostics while preserving failure.
 
 The pytest gate calls these actual builders. In separate scratch copies it
-introduces an unknown reference and changes an expected verdict to a lie.
+introduces an unknown reference and changes an example's expected verdict to
+an incorrect value.
 Each build must return nonzero and name the relevant defect. The gate also
 serves generated HTML on an ephemeral loopback port and retrieves it before
 closing the server. It never edits the checked-in documentation to seed failure.
@@ -74,7 +75,7 @@ retain. Add an inline comment only where a policy decision needs a reason.
 Next, copy ``docs`` into a directory under ``build/`` and change an expected
 output or a ``:func:`` target there. Run the matching builder and inspect its
 nonzero status. Do not weaken ``nitpicky`` or suppress the warning to get green.
-Restore the contract, not the appearance of success.
+Correct the example or reference instead of hiding the diagnostic.
 
 Autodoc runs imports
 ====================
@@ -89,7 +90,7 @@ An optional Markdown comparison
 ===============================
 
 MkDocs core is suited to Markdown guides and navigation. Sphinx supplies the
-Python object references, autodoc and doctest path required by this checkpoint.
+Python object references, autodoc and doctest path required by this lab.
 Plugins can extend MkDocs, but that is a separate dependency and test decision.
 
 .. code-block:: console

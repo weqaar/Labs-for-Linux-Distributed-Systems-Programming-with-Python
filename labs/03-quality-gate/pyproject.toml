@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "lab-03-quality-gate"
 version = "0.1.0"
-description = "Relay checkpoint 03: honest JUnit quality gate evidence."
+description = "Report quality-check findings and checker errors using exit codes and JUnit XML."
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [{ name = "Weqaar Janjua", email = "weqaar.janjua@packetfive.com" }]

@@ -31,7 +31,7 @@ class InvalidParallelismError(Exception):
 
 
 class AttemptPlanExhaustedError(Exception):
-    """Raised when a test forgets to provide enough planned outcomes."""
+    """Raised when a node needs another attempt but its supplied outcomes are exhausted."""
 
 
 @dataclass(frozen=True)

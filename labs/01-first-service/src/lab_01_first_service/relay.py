@@ -1,4 +1,9 @@
-"""Checkpoint 01 for relay: an in-memory `/tasks` core for `relayctl`."""
+"""Store SigRaft job definitions and job status in memory.
+
+The import name is relay. That name does not mean the program relays
+traffic. Code identifiers such as TaskRecord and task-17 keep the task
+prefix used by this package.
+"""
 
 from __future__ import annotations
 
@@ -28,7 +33,7 @@ class TaskDefinition:
 
 @dataclass(frozen=True)
 class TaskRecord:
-    """The status document served back from `/tasks/<task-id>`."""
+    """An immutable job status. The resource path is `/tasks/<task-id>`."""
 
     task_id: str
     action: str
@@ -61,7 +66,7 @@ class InvalidTaskTransition(RelayDomainError):
 
 
 class InMemoryRelayService:
-    """First relay checkpoint used before HTTP and Azure arrive."""
+    """Submit, retrieve and transition tasks without a network or persistent storage."""
 
     def __init__(self) -> None:
         self._tasks: dict[str, TaskRecord] = {}

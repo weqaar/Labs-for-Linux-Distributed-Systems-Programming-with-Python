@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "lab-01-first-service"
 version = "0.1.0"
-description = "Relay checkpoint 01: an in-memory first service core."
+description = "Model in-memory task submission and state changes in relay."
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [{ name = "Weqaar Janjua", email = "weqaar.janjua@packetfive.com" }]

@@ -165,7 +165,7 @@ class RetryBudget:
 
     @property
     def tokens(self) -> float:
-        """Expose the current token count for tests."""
+        """Return the number of retry tokens currently available."""
 
         return self._tokens
 

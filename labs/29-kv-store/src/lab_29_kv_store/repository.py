@@ -32,7 +32,7 @@ class TtlPolicy:
 
 @dataclass(frozen=True)
 class IndexingPolicy:
-    """Subset of the Cosmos indexing policy surface."""
+    """Included and excluded paths for the modeled Cosmos index."""
 
     automatic: bool
     mode: str
@@ -52,7 +52,7 @@ class ContainerModel:
 
 @dataclass(frozen=True)
 class StoredTask:
-    """Persisted task plus storage metadata."""
+    """Task retained in the fake container with version and expiry metadata."""
 
     record: RelayTaskRecord
     etag: str
@@ -246,7 +246,7 @@ class FakeCosmosContainer:
 
 
 class CosmosTaskRepository:
-    """Relay task repository that models the Cosmos access patterns used in the book."""
+    """Model partitioned task reads, conditional writes and expiry with a fake client."""
 
     rejected_partition_keys = {
         "status": "Rejected because queued work would hot-spot one logical partition.",

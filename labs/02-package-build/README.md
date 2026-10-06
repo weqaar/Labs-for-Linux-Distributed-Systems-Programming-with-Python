@@ -5,23 +5,44 @@ native-looking executables for Linux and Windows. The executable contains a
 Python interpreter; PyInstaller bundles the program but does not compile Python
 to machine code.
 
-The checkpoint also contains `relay-template`, a Copier template that generates
-the shared `/tasks` resource and queued, running, succeeded, and failed state
-contract. This avoids starting later relay services by copying a stale project.
-Its Sphinx site also publishes the installed inspection API and executable
-examples, establishing the documentation contract carried into SigRaft.
+The lab also contains `relay-template`, a Copier template that generates
+the shared `/tasks` resource and queued, running, succeeded, and failed states.
+Use the template when you start a later lab so the new project gets its own
+package name. The generated package imports as `relay`; it does not relay traffic.
+Its Sphinx site publishes the installed inspection API and runs examples
+against it. The same build-and-test workflow can check SigRaft's API reference.
+
+## Goal and working order
+
+Turn a provided command into inspectable release artifacts, rather than assume
+that an editable install proves a wheel or executable works. This `relayctl`
+only inspects executable files; it does not submit jobs or contact `/tasks`.
+Its contribution to the SigRaft job-management web service is the packaging
+and documentation workflow, not a package imported by the final service.
+
+Use Python 3.10 or later from this lab directory. Read the shared
+[`CODING_STANDARDS.md`](../CODING_STANDARDS.md) and `AGENTS.md`.
+The command uses Python's standard library. The declared development extra
+provides build, Twine, PyInstaller, Copier and Sphinx alongside the gate tools.
+Linux binary inspection also needs `file` and `readelf`; Windows artifacts
+must be built on Windows. Nuitka and MkDocs are optional comparisons.
+
+1. Install below and run `relayctl --help` to identify the actual command.
+2. Inspect the installed API in the REPL, then build the wheel and sdist.
+3. Build the executable, inspect its format and run its `--version` command.
+4. Generate a fresh project and run its tests, then complete the documentation
+   exercises. Keep build evidence separate from the source checkout.
 
 ## Getting started
 
 ```bash
-python -m venv .venv && source .venv/bin/activate
+python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 ```
 
 ## Quality gates
 
-The same command runs on a laptop and in CI, so a failure is always
-reproducible:
+Run the configured checks before considering the lab complete:
 
 ```bash
 pybootstrap check
@@ -46,11 +67,10 @@ pytest
 |---|---|
 | 0 | Every gate passed |
 | 1 | A gate ran and found problems |
-| 2 | A gate could not run, so nothing was checked |
+| 2 | A gate could not run and supplied no verdict |
 
-The split between 1 and 2 is the point. A missing or misconfigured tool is not
-the same as clean code, and a pipeline that treats them alike will eventually
-report success while checking nothing.
+Fix findings reported by exit 1. For exit 2, repair the tool or its
+configuration and rerun it; an unavailable check cannot establish a pass.
 
 ## Layout
 
@@ -62,18 +82,20 @@ relay-template/       updateable Copier template for the relay project contract
 pyproject.toml        dependencies, tool settings and gate definition
 ```
 
-There is no separate build description. Dependencies live where pip already
-looks, tool settings live in each tool's own table, and `[tool.pybootstrap]`
-adds only the list of gates.
 
 ## Build Python distributions
+
+A source distribution contains the files needed to build the package. A wheel
+is the installable package produced by that build. Create both, then check that
+their metadata and long descriptions can be read by packaging tools:
 
 ```bash
 python -m build
 python -m twine check dist/*
 ```
 
-Install the wheel into a clean virtual environment and run `relayctl inspect`
+Install the wheel into a clean virtual environment and run
+`relayctl inspect /path/to/an/executable`
 there to prove the installed package, rather than the working tree, supplies
 the command.
 
@@ -104,14 +126,19 @@ The file header must report ELF and the intended machine architecture. On
 Windows, the pipeline checks both the `MZ` marker and the PE signature to prove
 the `.exe` suffix was not merely added to another file.
 
-## Generate the relay project shape
+## Generate a relay project
+
+Packaging distributes this command; a template starts a different project.
+Use Copier to generate that project's names and shared job fields without
+copying this lab's package name or build settings:
 
 ```bash
 copier copy --defaults \
   --data project_name=relay-service \
-  --data package_name=relay relay-template /tmp/generated-relay
-cd /tmp/generated-relay
+  --data package_name=relay relay-template build/generated-relay
+cd build/generated-relay
 pytest
+cd ../..
 ```
 
 Copier records the template source and answers in `.copier-answers.yml`. A
@@ -119,10 +146,14 @@ project generated from a versioned template can later use `copier update`, but
 the resulting diff still needs review. The test gate renders a fresh project and
 checks that its package preserves the relay resource and state contract.
 
-For the optional compiler comparison, build the same entry point with Nuitka
-onefile mode, then compare format, architecture, shared libraries, size and
-startup behavior with the required PyInstaller artifact. Both outputs remain
+The generated tests should pass before you edit the new project. That result
+checks the generated contract, not the wheel or executable built above.
+
+For the optional compiler comparison, return to this lab and build its entry
+point with Nuitka onefile mode. Compare format, architecture, shared libraries,
+size and startup behavior with the PyInstaller artifact. Both outputs remain
 specific to their target operating system and processor architecture.
+
 ## Python REPL debugging session
 
 After the editable install, inspect the package actually loaded by Python:
@@ -136,16 +167,22 @@ After the editable install, inspect the package actually loaded by Python:
 >>> [(name, type(getattr(lab, name)).__name__) for name in public]
 >>> inspect.getmembers(lab, inspect.isclass)
 >>> help(lab)
+>>> from lab_02_package_build.binary import executable_format
+>>> inspect.signature(executable_format)
+>>> import sys
+>>> executable_format(sys.executable).value
 ```
 
-Compare the imported module path with the wheel and executable inputs. Inspect
-one public callable signature before tracing how the same package enters each
-artifact.
+On Linux the last result is `ELF`; on Windows it is `PE`. Compare the imported
+module path with the wheel and executable inputs. Format detection reads bytes
+without executing the inspected program.
 
 ## Build and preview the documentation
 
-Sphinx is the primary workflow. Its dependencies are already in the `dev`
-extra in `pyproject.toml`; no separate requirements file is needed.
+Readers also need to know how the packaged API behaves. Sphinx builds that
+reference from installed Python objects and executes selected examples.
+Its dependencies are already in the `dev` extra in `pyproject.toml`;
+no separate requirements file is needed.
 
 ```bash
 python -m sphinx -n -W --keep-going -b html docs build/docs/html
@@ -154,7 +191,7 @@ python -m http.server 8000 --bind 127.0.0.1 --directory build/docs/html
 ```
 
 Open http://127.0.0.1:8000/ and inspect the API signatures, exception sections
-and checkpoint footer. Stop the foreground preview with Ctrl-C. This loopback
+and lab footer. Stop the foreground preview with Ctrl-C. This loopback
 server is for local inspection, not deployment.
 
 `docs/conf.py` enables autodoc, autosummary, napoleon and doctest, with the
@@ -170,15 +207,15 @@ The tests expose that mistake safely with a raising import in a scratch copy.
    guarantees a type hint cannot express.
 2. Extend the `readelf_headers` docstring to distinguish missing input from
    a missing inspection tool. Keep the promise consistent with its exceptions.
-   Explain why the PE offset comment is useful while “seek to offset” is not.
+   Explain why the PE offset comment is useful while "seek to offset" is not.
 3. Add an unknown-signature example in `docs/examples.rst`. Build HTML and
    doctests, then make an expected result wrong in a scratch copy under `build/`
    and prove doctest returns nonzero. Never damage the source to test the gate.
 4. Change the small template footer and verify the rendered page retains the
    original theme footer. Keep presentation separate from the API contract.
 
-The test gate executes strict HTML and doctest builds, proves malformed
-references and wrong examples fail, and retrieves generated pages from a
+The test gate executes strict HTML and doctest builds, checks that malformed
+references and wrong examples return nonzero, and retrieves generated pages from a
 loopback server using an ephemeral port with cleanup. These are process and
 HTTP checks, not assertions that source documentation contains certain words.
 
@@ -201,3 +238,8 @@ The HTML and doctest commands above must also exit 0 after your exercises.
 Keep the existing wheel, sdist, template and platform-specific executable
 evidence described above; documentation is an additional release artifact,
 not a substitute for testing the produced command.
+
+You should be able to explain source distributions, wheels and bundled
+interpreters, and why the latter are platform-specific. Stop preview servers
+with Ctrl-C. Remove only the generated project and build outputs you created
+after retaining evidence; no cloud resources are created.

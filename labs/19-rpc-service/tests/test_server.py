@@ -1,10 +1,8 @@
-"""Tests for the server entry point: configuration, event loop resolution and
-the injectable Uvicorn seam.
+"""Check server configuration, loop selection and arguments passed to Uvicorn.
 
 Nothing here starts a real server or imports a real uvloop.
-``resolve_event_loop_name`` takes its importer as a parameter precisely so
-both the silent-default and the loud-failure paths can be tested whether or
-not the optional ``uvloop`` extra happens to be installed.
+An injected importer lets tests check the asyncio default and the error when
+requested uvloop is unavailable, regardless of installed extras.
 """
 
 from __future__ import annotations

@@ -93,7 +93,7 @@ class FencedStoredValue:
 
 @dataclass(frozen=True)
 class ScheduledInterval:
-    """Exactly-once scheduler decision for one interval."""
+    """One interval decision retained by the in-memory scheduler ledger."""
 
     interval_start_ms: int
     scheduler_id: str
@@ -361,7 +361,7 @@ class FencedLeaseManager:
 
 
 class FencedScheduleLedger:
-    """Exactly-once scheduler record protected by fence tokens."""
+    """Deduplicate interval decisions in memory and reject stale fence tokens."""
 
     def __init__(self) -> None:
         self._highest_fence = 0

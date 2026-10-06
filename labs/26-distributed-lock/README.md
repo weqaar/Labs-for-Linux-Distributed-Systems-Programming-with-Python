@@ -1,18 +1,41 @@
 # Lab 26 Distributed Lock
 
-Deterministic lock and lease checkpoint for the relay scheduler.
+This lab examines what happens when a worker pauses long enough to
+lose ownership, then resumes writing. An in-memory simulation makes expiry and
+competing clients repeatable.
+
+## Goal and activities
+
+Separate command atomicity, lock ownership and stale-writer rejection.
+You will reproduce races using a supplied in-memory stand-in for Redis and a manual
+clock, not contact Redis or establish exactly-once effects in a live system.
+Use Python 3.10 or later here and read
+[`CODING_STANDARDS.md`](../CODING_STANDARDS.md) and `AGENTS.md`.
+Only standard-library simulation code runs; dependencies are in `pyproject.toml`.
+
+A lease grants ownership until a deadline. An owner token identifies who may
+release the lock. A fencing token serves another purpose: each new owner gets
+a larger number, and the destination rejects writes carrying an older number.
+Expiry alone cannot make a paused process forget its old permission.
+
+1. Install and compare `INCR` with separate client reads and writes below.
+2. Run `pytest -q tests/test_lab_26_distributed_lock.py`. Trace the old owner
+   releasing a new owner's lock after expiry.
+3. Compare naive deletion, compare-and-delete and the fenced destination.
+   Only the destination's token check rejects the resumed stale writer.
+4. Advance the manual clock through scheduler restart and inspect the retained
+   interval ledger. Then explain what process-memory loss would remove.
 
 ## Getting started
 
 ```bash
-python -m venv .venv && source .venv/bin/activate
+python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 ```
 
 ## Quality gates
 
-The same command runs on a laptop and in CI, so a failure is always
-reproducible:
+Run the configured checks before considering the lab complete:
 
 ```bash
 pybootstrap check
@@ -37,18 +60,17 @@ pytest
 |---|---|
 | 0 | Every gate passed |
 | 1 | A gate ran and found problems |
-| 2 | A gate could not run, so nothing was checked |
+| 2 | A gate could not run and supplied no verdict |
 
-The split between 1 and 2 is the point. A missing or misconfigured tool is not
-the same as clean code, and a pipeline that treats them alike will eventually
-report success while checking nothing.
+Fix findings reported by exit 1. For exit 2, repair the tool or its
+configuration and rerun it; an unavailable check cannot establish a pass.
 
 The dev extra installs the public pybootstrap project and its gate tools from
 GitHub, so a fresh clone receives the same quality runner used by every lab.
 
 ## Simulation focus
 
-The package first models Redis's command-execution boundary:
+The package first compares atomic Redis commands with client-side sequences:
 
 - two clients lose an update when each performs `GET` followed by `SET`
 - two server-side `INCR` commands preserve both updates
@@ -59,15 +81,15 @@ It then models three coordination mechanisms with an in-memory clock:
 
 - Redis-style `SET NX PX` plus both naive and compare-delete release paths
 - a fenced lease manager that issues monotonic ownership tokens
-- an exactly-once scheduler ledger keyed by interval
+- an in-memory scheduler ledger that deduplicates modeled interval decisions
 
-Tests prove the client-command race and naive `DEL` bug, show the paused-holder
+Tests reproduce the client-command race and naive `DEL` bug, show the paused-holder
 corruption on an unfenced store, reject the same stale writer with fencing, and
-schedule exactly once per interval without live Redis or Azure.
+record one schedule per interval while that ledger is retained, without live
+Redis or Azure. This is not an exactly-once guarantee for external job effects.
 
-For relay correctness I would deploy the fenced mechanism. Redis with expiry is
-acceptable when duplicate work is merely wasteful, not when an old holder can
-corrupt state.
+Use destination fencing when a resumed old holder could corrupt state.
+An expiring Redis lock alone is suitable only when duplicate work is tolerable.
 
 ## Layout
 
@@ -77,9 +99,6 @@ tests/                the test suite
 pyproject.toml        dependencies, tool settings and gate definition
 ```
 
-There is no separate build description. Dependencies live where pip already
-looks, tool settings live in each tool's own table, and `[tool.pybootstrap]`
-adds only the list of gates.
 ## Python REPL debugging session
 
 After the editable install, inspect lease and fencing values:
@@ -92,7 +111,21 @@ After the editable install, inspect lease and fencing values:
 >>> public
 >>> inspect.getmembers(lab, inspect.isclass)
 >>> help(lab)
+>>> store = lab.InMemoryRedisStore(lab.SimulationClock())
+>>> store.counter_incr("relay:attempts", client_id="worker-a")
+1
+>>> store.counter_incr("relay:attempts", client_id="worker-b")
+2
+>>> [event.command for event in store.events]
+['INCR', 'INCR']
 ```
 
-Construct one lease, inspect its deadline and fencing token, and compare value
-equality with object identity before simulating expiry.
+Each `INCR` is one modeled server operation, so both increments are preserved.
+Compare that with the test that interleaves two `GET`/`SET` pairs and loses an
+update. The lease tests then apply the same distinction to releasing a lock.
+
+The SigRaft job-orchestration web service must reject writes from workers
+after their leases are no longer current. This lab demonstrates that check, not a
+lock package imported by Lab 39. Finish with stale-write rejection demonstrated
+and `pybootstrap check` exit 0. No subscription or server is needed. Exit the
+REPL to discard lock, script-cache and ledger state.

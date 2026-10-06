@@ -148,7 +148,7 @@ def build_query_parser() -> ParserElement:
 
 
 def parse_query(source: str) -> Expression:
-    """Parse all query text and return a typed, executable syntax tree."""
+    """Parse the complete query into typed nodes that can evaluate task fields."""
 
     try:
         parsed = build_query_parser().parse_string(source, parse_all=True)

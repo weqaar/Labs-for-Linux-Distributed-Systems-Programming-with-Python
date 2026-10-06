@@ -1,11 +1,8 @@
-"""Descriptive statistics, a confidence interval, a two-release comparison
-and a basic regression for relay operational observations.
+"""Summarize relay attempts, compare releases and fit a descriptive regression.
 
-This module answers a fixed set of operational questions with NumPy,
-pandas, SciPy and statsmodels, and stops there. Predicting a task's outcome
-or duration from features is a modelling exercise outside the scope this
-book sets: these functions compute the arithmetic behind a promotion or
-rollback decision, not a forecast.
+The functions use NumPy, pandas, SciPy and statsmodels to describe recorded
+durations and failures. They do not forecast future outcomes or decide whether
+to promote a release.
 """
 
 from __future__ import annotations
@@ -88,11 +85,10 @@ class RegressionResult:
 
 
 def observations_to_frame(observations: tuple[Observation, ...]) -> pd.DataFrame:
-    """Build a tidy frame: one row per observation, one column per field.
+    """Build a DataFrame with one row per attempt and one column per field.
 
-    Tidy here means what Chapter 35 defines it to mean: every row is one
-    observation unit (one task attempt), every column is one variable, and
-    no value is packed into a column name or spread across several cells.
+    Each row is one task attempt, not necessarily an independent job.
+    Raise ``ValueError`` if no observations are supplied.
     """
     if not observations:
         raise ValueError("cannot analyse an empty set of observations")
@@ -119,9 +115,8 @@ def _releases_ordered_by_first_timestamp(frame: pd.DataFrame) -> list[str]:
 def chronological_releases(frame: pd.DataFrame) -> tuple[str, str]:
     """Return (baseline, candidate) ordered by each release's first timestamp.
 
-    The comparison this lab draws is deliberately narrow: exactly two
-    releases, ordered by when they started serving. A frame with any other
-    number of releases raises rather than guessing which two to compare.
+    Require exactly two releases, ordered by their earliest recorded attempt.
+    Raise ``ValueError`` for any other number of releases.
     """
     releases = _releases_ordered_by_first_timestamp(frame)
     if len(releases) != 2:
@@ -149,10 +144,7 @@ def summarize_release(frame: pd.DataFrame, release: str) -> ReleaseSummary:
         median_ms=float(np.median(durations)),
         p95_ms=float(np.percentile(durations, 95)),
         p99_ms=float(np.percentile(durations, 99)),
-        # ddof=1: the sample standard deviation, since these releases are a
-        # sample of tasks rather than the entire population of tasks that
-        # will ever run. NumPy's own default is ddof=0 and would understate
-        # it, which is the trap Chapter 35 names explicitly.
+        # Use the sample denominator n - 1 rather than NumPy's default n.
         sample_std_ms=float(durations.std(ddof=1)),
     )
 
@@ -166,10 +158,11 @@ def summarize_all_releases(frame: pd.DataFrame) -> tuple[ReleaseSummary, ...]:
 def overall_confidence_interval(
     frame: pd.DataFrame, confidence: float = 0.95
 ) -> ConfidenceInterval:
-    """A t-distribution confidence interval for the mean task duration.
+    """Return a t-distribution confidence interval for mean attempt duration.
 
-    This is an interval for the mean, built from sample size and spread. It
-    is not a percentile and it is not a guarantee about any single task.
+    ``confidence`` must be between zero and one, with at least two rows.
+    The calculation treats rows as independent and does not adjust for retries
+    of the same task. This is not a percentile or a single-task guarantee.
     """
     if not 0.0 < confidence < 1.0:
         raise ValueError("confidence must be between 0 and 1")
@@ -192,11 +185,13 @@ def overall_confidence_interval(
 def compare_releases(frame: pd.DataFrame, baseline: str, candidate: str) -> ComparisonResult:
     """Compare two releases' durations with a Mann-Whitney U test.
 
-    Mann-Whitney is used in preference to a two-sample t-test because task
-    duration is right-skewed (a handful of very slow tasks and a hard floor
-    near zero), which violates the roughly symmetric, similarly-shaped
-    samples a t-test assumes. Mann-Whitney only assumes independent
-    observations and an ordinal scale.
+    Compare ranks without requiring normally distributed durations. The
+    equal-distribution null model assumes independent observations; retries
+    of one task can violate that assumption. Different distribution shapes
+    prevent interpreting the result as a median-only comparison.
+
+    Both named releases need at least one row. A positive rank-biserial effect
+    means candidate durations tend to be larger, not that the candidate is faster.
     """
     base = frame.loc[frame["release"] == baseline, "duration_ms"].to_numpy(dtype=np.float64)
     cand = frame.loc[frame["release"] == candidate, "duration_ms"].to_numpy(dtype=np.float64)
@@ -207,9 +202,8 @@ def compare_releases(frame: pd.DataFrame, baseline: str, candidate: str) -> Comp
         raise ValueError("release comparison requires scalar test results")
     u_statistic = float(statistic)
     # The rank-biserial correlation turns U into a signed effect size on a
-    # -1..1 scale: 0 means the two samples are interleaved with no tendency
-    # either way, and +-1 means every candidate observation beat (or lost
-    # to) every baseline observation.
+    # -1..1 scale: +1 means every candidate duration is larger than every
+    # baseline duration; -1 means every candidate duration is smaller.
     rank_biserial = 1.0 - (2.0 * u_statistic) / (base.size * cand.size)
     return ComparisonResult(
         baseline_release=baseline,
@@ -230,12 +224,12 @@ def fit_duration_model(frame: pd.DataFrame) -> RegressionResult:
     (statsmodels' formula interface builds this from ``C(release)``
     automatically, absorbing the first release into the intercept). The
     coefficients describe an association in this sample, not a causal
-    effect: a second fit adding
-    region is kept alongside the first because region is correlated with
-    both queue depth and duration in this dataset, and dropping it changes
+    effect. A second fit adds region because region is correlated with
+    both queue depth and duration in the bundled dataset, and dropping it changes
     even the sign of the queue-depth coefficient. Durbin-Watson checks
-    whether the residuals are still correlated with each other in time
-    order, which plain OLS standard errors assume they are not.
+    correlation between adjacent residuals in the supplied row order; this
+    function does not sort rows by timestamp. Plain OLS standard errors assume
+    uncorrelated errors.
     """
     model = smf.ols("duration_ms ~ queue_depth_at_submit + C(release)", data=frame).fit()
     region_controlled = smf.ols(

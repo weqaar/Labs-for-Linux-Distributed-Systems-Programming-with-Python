@@ -1,4 +1,4 @@
-"""GraphQL query, mutation, and subscription boundary for relay tasks."""
+"""Read, submit and subscribe to retained relay tasks through GraphQL."""
 
 from __future__ import annotations
 
@@ -127,7 +127,7 @@ class RelayGraphQL:
         variables: dict[str, object] | None = None,
         scopes: frozenset[str] = frozenset(),
     ) -> AsyncIterator[ExecutionResult]:
-        """Start a GraphQL subscription over the retained event sequence."""
+        """Return an iterator over retained task events, without waiting for new ones."""
 
         import inspect
 

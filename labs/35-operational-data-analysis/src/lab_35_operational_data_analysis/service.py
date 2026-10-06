@@ -1,13 +1,9 @@
 """A small stdlib HTTP front end for the operational analysis report.
 
-Binds to 127.0.0.1 by default, matching the local-first posture the rest of
-this book uses for a checkpoint that has no reason to be reachable from
-outside the machine running it. ``GET /`` renders the current analysis of
-the bundled (or configured) CSV as an HTML page. ``GET /healthz`` reports
-only that the process can respond, the narrower claim Chapter 34 gives
-health routes: it does not prove the CSV is present or the analysis
-succeeds, which is why the page route surfaces its own errors instead of
-hiding them behind a healthy probe.
+Binds to 127.0.0.1 by default so other machines cannot reach the listener.
+``GET /`` renders the bundled or configured CSV as an HTML page.
+``GET /healthz`` reports only that the process can respond; it does not read
+the CSV or run analysis. The page route reports its own analysis failures.
 
 An analysis failure is logged in full server-side, with a traceback, and
 reported to the client as a generic message with no exception text or
@@ -50,9 +46,8 @@ SECURITY_HEADERS: dict[str, str] = {
 class AnalysisApplication:
     """Builds the report page from a configured dataset path on each request.
 
-    Rebuilding per request keeps the service simple and correct for a small,
-    static, local fixture; it does not cache, so there is no staleness to
-    reason about in a checkpoint this size.
+    Rebuild on every page request rather than serving a cached report.
+    This suits the small local fixture but repeats the analysis cost.
     """
 
     data_path: Path
@@ -96,9 +91,9 @@ def build_handler(application: AnalysisApplication) -> type[BaseHTTPRequestHandl
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
-    """Build the CLI parser, kept separate from ``main`` so its defaults,
-    including the 127.0.0.1 bind address, can be checked without starting a
-    server that blocks forever.
+    """Return the CLI parser without starting the HTTP server.
+
+    The default bind address is 127.0.0.1.
     """
     parser = argparse.ArgumentParser(description="Serve the relay operational analysis report")
     parser.add_argument("--host", default="127.0.0.1")

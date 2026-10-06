@@ -1,4 +1,4 @@
-"""Relay stateless task service checkpoint."""
+"""Relay job-management API with storage separate from each app instance."""
 
 from __future__ import annotations
 

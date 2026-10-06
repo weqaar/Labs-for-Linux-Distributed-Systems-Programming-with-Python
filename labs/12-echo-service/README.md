@@ -1,9 +1,31 @@
 # Lab 12 Echo Service
 
-This lab puts relay bytes through real TCP and UDP sockets on loopback and uses
-Scapy offline to show how one reader-supplied chat message becomes a TCP
-segment or UDP datagram, an IPv4 packet and an Ethernet frame, then returns to
+This lab sends bytes from the SigRaft package through real TCP and UDP sockets
+on loopback. The Python import name is `relay`. That name does not mean the
+program relays traffic. Scapy, used offline, shows how a message you
+supply becomes a TCP segment or UDP datagram, an IPv4 packet and an Ethernet frame, then returns to
 application bytes.
+
+## Goal and working order
+
+Observe the difference between a byte stream and a datagram, then distinguish
+kernel socket behavior from offline packet representation. The supplied echo
+servers return bytes; they do not execute tasks or expose an HTTP `/tasks` API.
+This is the transport lab for the SigRaft job-management web service,
+not a package automatically imported by Lab 39.
+
+Use Python 3.10 or later here and read
+[`CODING_STANDARDS.md`](../CODING_STANDARDS.md) and `AGENTS.md`.
+The socket code uses the standard library; Scapy is the declared runtime
+dependency for packet inspection. No root access, Azure subscription or
+external network is required, but loopback sockets must be permitted.
+
+1. Install below and run the packet journey with a short message.
+2. Compare the TCP and UDP header sizes in the REPL.
+3. Run `pytest -q tests/test_lab_12_echo_service.py tests/test_packet_journey.py`.
+   Inspect the split-read test and the deliberately discarded first datagram.
+4. Change a test payload, keeping it within the encoded size limit, and
+   confirm that encapsulation and decapsulation preserve its bytes.
 
 ## Lab role
 
@@ -12,10 +34,10 @@ application bytes.
 - task fields: `task_id`, `definition`, `state`
 - task states: `queued`, `running`, `succeeded`, `failed`
 
-This lab keeps the payload textual and concentrates on transport contracts.
-The TCP tests prove that stream reads do not preserve write boundaries. The
+This lab keeps the payload textual so it is easy to compare sent and received bytes.
+The TCP tests demonstrate that stream reads do not preserve write boundaries. The
 UDP tests preserve a datagram boundary, deliberately discard the first request
-and prove that a bounded application retry transmits a second copy. Both paths
+and check that a bounded application retry transmits a second copy. Both paths
 set explicit timeouts and shut down cleanly. The packet journey serializes and
 dissects bytes in memory. It does not send a raw frame, sniff an interface or
 require root.
@@ -23,13 +45,16 @@ require root.
 ## Getting started
 
 ```bash
-python -m venv .venv && source .venv/bin/activate
+python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 ```
 
 ## Trace encapsulation and decapsulation
 
-Pass any non-empty UTF-8 text up to 1,024 encoded bytes:
+Encapsulation adds protocol headers around application bytes; decapsulation
+reads those headers and recovers the payload. A short text message makes the
+payload easy to recognize at every layer. Pass any non-empty UTF-8 text up to
+1,024 encoded bytes:
 
 ```bash
 relay-packet-journey "hello from the reader" --view encapsulation
@@ -62,8 +87,7 @@ duplicate suppression.
 
 ## Quality gates
 
-The same command runs on a laptop and in CI, so a failure is always
-reproducible:
+Run the configured checks before considering the lab complete:
 
 ```bash
 pybootstrap check
@@ -88,29 +112,26 @@ pytest
 |---|---|
 | 0 | Every gate passed |
 | 1 | A gate ran and found problems |
-| 2 | A gate could not run, so nothing was checked |
+| 2 | A gate could not run and supplied no verdict |
 
-The split between 1 and 2 is the point. A missing or misconfigured tool is not
-the same as clean code, and a pipeline that treats them alike will eventually
-report success while checking nothing.
+Fix findings reported by exit 1. For exit 2, repair the tool or its
+configuration and rerun it; an unavailable check cannot establish a pass.
 
 ## Layout
 
 ```
 src/lab_12_echo_service/    the package
 tests/                the test suite
-ci/                   pipeline definition
 pyproject.toml        dependencies, tool settings and gate definition
 ```
 
-There is no separate build description. Dependencies live where pip already
-looks, tool settings live in each tool's own table, and `[tool.pybootstrap]`
-adds only the list of gates.
 ## Python REPL debugging session
 
 After the editable install, inspect both the socket service and packet model:
 
 ```pycon
+>>> import lab_12_echo_service as lab
+>>> lab.__name__, lab.__file__
 >>> from lab_12_echo_service import trace_chat_message
 >>> journey = trace_chat_message("inspect this")
 >>> [stage.unit for stage in journey.encapsulation]
@@ -127,6 +148,12 @@ After the editable install, inspect both the socket service and packet model:
 >>> print(journey.render("decapsulation"))
 ```
 
-This path opens no socket. Use the loopback tests when debugging live TCP
+The sizes grow as each header is added, and the final summary recovers the
+original text. This path opens no socket. Use the loopback tests when debugging live TCP
 `send`/`recv` or UDP `sendto`/`recvfrom` behavior, and use the packet journey
 when debugging layer fields or serialized bytes.
+
+Finish when you can explain why one TCP read need not equal one write, why UDP
+retry belongs to the application, and why offline frames do not prove kernel
+behavior. `pybootstrap check` must exit 0. Tests close and join their loopback
+servers; close any server you create in your own experiment before exiting.

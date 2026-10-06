@@ -100,7 +100,7 @@ class ConfigError(ValueError):
 
 
 class CommandRunner(Protocol):
-    """Injected process boundary used only after an explicit action."""
+    """Run an argument vector after the caller has authorized execution."""
 
     def run(self, argv: Sequence[str], env: Mapping[str, str]) -> None:
         """Run one command without invoking a shell."""

@@ -1,4 +1,4 @@
-"""Deterministic benchmark helpers for the framing checkpoint."""
+"""Measure framing implementations on a fixed input corpus."""
 
 from __future__ import annotations
 

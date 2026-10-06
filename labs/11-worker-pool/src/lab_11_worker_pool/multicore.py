@@ -46,7 +46,7 @@ class CpuResult:
 
 @dataclass(frozen=True, slots=True)
 class ProcessRun:
-    """Evidence from one bounded process-queue run."""
+    """Results and worker process IDs from one bounded process-queue run."""
 
     start_method: str
     parent_pid: int
@@ -56,7 +56,7 @@ class ProcessRun:
 
 @dataclass(frozen=True, slots=True)
 class SharedMemoryRun:
-    """Evidence from processing slices of one shared-memory segment."""
+    """The byte sum, worker process IDs and shared-memory segment size."""
 
     byte_sum: int
     worker_pids: tuple[int, ...]

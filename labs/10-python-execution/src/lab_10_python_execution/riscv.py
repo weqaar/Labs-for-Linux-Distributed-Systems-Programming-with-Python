@@ -24,7 +24,7 @@ class FullAdderStage:
 
 @dataclass(frozen=True, slots=True)
 class RiscVAddTrace:
-    """Decoded fields and datapath evidence for one RV32I ADD."""
+    """Decoded fields, register values and full-adder stages for one RV32I ADD."""
 
     instruction: int
     pc_before: int

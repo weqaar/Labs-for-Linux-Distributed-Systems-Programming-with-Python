@@ -1,15 +1,38 @@
 # Lab 13 Packet Tools
 
-Relay checkpoint nine adds offline diagnostics for the service transport.
+This lab interprets packets that could explain why a connection to
+SigRaft failed. It constructs the packets locally, so you can compare replies
+without scanning a network.
 
-## Checkpoint role
+## Goal and activities
+
+Interpret packet evidence without confusing a refusal with silence. You will
+construct bytes, parse headers and classify responses using the supplied
+reference implementation. This teaches connection diagnosis for the SigRaft
+job-management web service, not a live network scanner or installed `relayctl`
+subcommand. Lab 39 does not import this package.
+
+Use Python 3.10 or later in this directory and read
+[`CODING_STANDARDS.md`](../CODING_STANDARDS.md) and `AGENTS.md`.
+The runtime uses standard-library byte handling; no Scapy dependency, raw
+socket permission or cloud subscription is needed. Dependencies are declared
+only in `pyproject.toml`.
+
+1. Install below and inspect `diagnostics.py` and `packets.py`.
+2. Build and classify the SYN/ACK fixture in the REPL.
+3. Change its flags to RST/ACK and compare the classification. Read the ICMP
+   and timeout tests: no packet received is not proof of a filtering rule.
+4. Run `pytest -q tests/test_lab_13_packet_tools.py` and retain a test for
+   each distinct evidence category.
+
+## Names this lab keeps
 
 - service name: `relay`
 - CLI name: `relayctl`
 - task fields: `task_id`, `definition`, `state`
 - task states: `queued`, `running`, `succeeded`, `failed`
 
-This checkpoint does not need raw sockets or live cloud networking. It plans
+This lab does not need raw sockets or live cloud networking. It plans
 the probe sequence that `relayctl` would use, parses constructed IPv4, TCP,
 UDP, and ICMP packets, and distinguishes refused ports, silent timeouts, and
 filtered or unreachable paths from deterministic test evidence.
@@ -17,14 +40,13 @@ filtered or unreachable paths from deterministic test evidence.
 ## Getting started
 
 ```bash
-python -m venv .venv && source .venv/bin/activate
+python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 ```
 
 ## Quality gates
 
-The same command runs on a laptop and in CI, so a failure is always
-reproducible:
+Run the configured checks before considering the lab complete:
 
 ```bash
 pybootstrap check
@@ -49,27 +71,24 @@ pytest
 |---|---|
 | 0 | Every gate passed |
 | 1 | A gate ran and found problems |
-| 2 | A gate could not run, so nothing was checked |
+| 2 | A gate could not run and supplied no verdict |
 
-The split between 1 and 2 is the point. A missing or misconfigured tool is not
-the same as clean code, and a pipeline that treats them alike will eventually
-report success while checking nothing.
+Fix findings reported by exit 1. For exit 2, repair the tool or its
+configuration and rerun it; an unavailable check cannot establish a pass.
 
 ## Layout
 
 ```
 src/lab_13_packet_tools/    the package
 tests/                the test suite
-ci/                   pipeline definition
 pyproject.toml        dependencies, tool settings and gate definition
 ```
 
-There is no separate build description. Dependencies live where pip already
-looks, tool settings live in each tool's own table, and `[tool.pybootstrap]`
-adds only the list of gates.
 ## Python REPL debugging session
 
-After the editable install, inspect the packet model:
+After the editable install, construct a TCP reply with SYN and ACK flags,
+the flags expected when a peer accepts a connection attempt. The parser
+recovers those flags and the classifier interprets them:
 
 ```pycon
 >>> import inspect
@@ -79,7 +98,22 @@ After the editable install, inspect the packet model:
 >>> public
 >>> inspect.getmembers(lab, inspect.isclass)
 >>> help(lab)
+>>> packet = lab.build_ipv4_tcp_packet(
+...     source_port=7000, destination_port=41000,
+...     flags=lab.TcpFlag.SYN | lab.TcpFlag.ACK, payload=b"relay",
+... )
+>>> parsed = lab.parse_network_packet(packet)
+>>> parsed.tcp.payload
+b'relay'
+>>> lab.classify_probe_evidence(parsed) is lab.ProbeOutcome.OPEN
+True
 ```
 
-Construct or decode the smallest packet fixture, inspect its fields and type,
-and compare its structured representation with the original bytes.
+The payload survives parsing and the reply is classified as open. Replace
+SYN with RST to represent a reset and inspect the refused classification.
+A timeout has no reply to inspect, so it must remain a separate observation.
+
+Finish when you can separate raw bytes, parsed fields and inferred outcomes,
+and `pybootstrap check` exits 0. The tests construct packets but do not send
+them. Exit Python to discard fixtures; there is no listener or infrastructure
+to tear down.

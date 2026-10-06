@@ -26,7 +26,8 @@ The server acknowledges before sending the snapshot. Events carry ``id``,
 ``type: "event"``, ``epoch``, ``sequence`` and ``job``. Send
 ``{"id":"3","operation":"unwatch"}`` to stop the subscription without closing
 the connection. Ordinary commands can use that connection while it is subscribed.
-The CLI exposes a single watch; protocol clients must demultiplex by ID.
+The CLI exposes a single watch; clients with multiple outstanding commands
+must match incoming messages to their request IDs.
 
 There is at most one subscription per connection, 32 connections and 32
 subscriptions per listener/service respectively. Application mailboxes hold at
@@ -45,9 +46,10 @@ Recovery is explicit
 There is no durable event history and no resume cursor in this final listener.
 On disconnect or close code 1013, reopen a watch to obtain a fresh snapshot.
 Intermediate changes may have been missed. After a process restart, even the
-job record may be gone; reusing an old identifier can refer to different work.
+in-memory job may be gone; reusing an old identifier can refer to different work.
 
 Never automatically retry submission after losing a connection: the service
 may have accepted it before the response was lost. Request IDs prevent
 re-execution only within that live connection, not across reconnects.
-Durable idempotency and replay require additional storage contracts.
+Recovering duplicate submissions or missed events across process restarts
+requires durable storage for request outcomes and event history.

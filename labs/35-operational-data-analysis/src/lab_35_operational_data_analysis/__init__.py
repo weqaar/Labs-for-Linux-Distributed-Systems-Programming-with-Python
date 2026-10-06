@@ -1,13 +1,9 @@
-"""Operational data analysis for relay: descriptive statistics, a confidence
-interval, a two-release comparison and a basic regression, rendered as a
-small local web report.
+"""Analyze recorded relay attempts and render a local web report.
 
-This is the checkpoint for Chapter 35 of Linux Distributed Systems
-Programming with Python. It reads a CSV of completed relay task attempts
-shaped like the telemetry Chapter 34 exports, validates it against a
-documented schema, and answers a fixed set of operational questions with
-NumPy, pandas, SciPy, Matplotlib and statsmodels. It does not train, score
-or predict; that is out of scope for this book.
+Validate a CSV, summarize durations, compare two releases and fit a descriptive
+regression with NumPy, pandas, SciPy, Matplotlib and statsmodels. The bundled
+CSV is synthetic, not a live telemetry export. The analysis describes the
+recorded sample rather than predicting future tasks.
 """
 
 from __future__ import annotations

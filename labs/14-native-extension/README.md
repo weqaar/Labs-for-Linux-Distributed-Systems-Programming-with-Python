@@ -1,16 +1,44 @@
 # Lab 14 Native Extension
 
-Relay checkpoint ten compares a pure-Python framing checksum and parser with
+This lab compares a pure-Python framing checksum and parser with
 a buildable native fast path.
 
-## Checkpoint role
+The frame contains a length header followed by task bytes. Both implementations
+must recover that length and calculate the same checksum before their running
+times can be compared. The checksum detects changes in this exercise; it is
+not an authentication mechanism.
+
+## Goal and activities
+
+Establish behavioral equivalence before evaluating performance. You will
+inspect the Python reference and C extension, compare frame digests and record
+which implementation actually ran. A fallback result is not native evidence.
+This shows how to evaluate a C extension before using it to optimize the
+SigRaft job-management web service; Lab 39 does not automatically use this extension.
+
+Use Python 3.10 or later in this directory and read
+[`CODING_STANDARDS.md`](../CODING_STANDARDS.md) and `AGENTS.md`.
+The pure path uses the standard library. Building the extension needs a C
+compiler and Python development headers; build configuration and dependencies
+are declared in `pyproject.toml`. No network service or subscription is needed
+after installation.
+
+1. Install and check `has_native_extension()` in the REPL.
+2. Inspect `pure.py`, `native.py` and the C source. Compare checksums for the
+   same frame, not timings from different payloads.
+3. Run `pytest -q tests/test_lab_14_native_extension.py`. Include truncated
+   and oversized inputs as well as valid frames.
+4. Use `benchmark_frame_digests` only after equivalence passes. Record its
+   implementation field and environment; do not require a speed-up in tests.
+
+## Names this lab keeps
 
 - service name: `relay`
 - CLI name: `relayctl`
 - task fields: `task_id`, `definition`, `state`
 - task states: `queued`, `running`, `succeeded`, `failed`
 
-This checkpoint keeps the pure-Python implementation as the reference and
+This lab keeps the pure-Python implementation as the reference and
 builds a small native extension from `pyproject.toml` alone. The tests assert
 equivalence on a fixed frame corpus and record benchmark measurements without
 claiming a speed-up when the native path is unavailable.
@@ -18,14 +46,13 @@ claiming a speed-up when the native path is unavailable.
 ## Getting started
 
 ```bash
-python -m venv .venv && source .venv/bin/activate
+python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 ```
 
 ## Quality gates
 
-The same command runs on a laptop and in CI, so a failure is always
-reproducible:
+Run the configured checks before considering the lab complete:
 
 ```bash
 pybootstrap check
@@ -50,24 +77,19 @@ pytest
 |---|---|
 | 0 | Every gate passed |
 | 1 | A gate ran and found problems |
-| 2 | A gate could not run, so nothing was checked |
+| 2 | A gate could not run and supplied no verdict |
 
-The split between 1 and 2 is the point. A missing or misconfigured tool is not
-the same as clean code, and a pipeline that treats them alike will eventually
-report success while checking nothing.
+Fix findings reported by exit 1. For exit 2, repair the tool or its
+configuration and rerun it; an unavailable check cannot establish a pass.
 
 ## Layout
 
 ```
 src/lab_14_native_extension/    the package
 tests/                the test suite
-ci/                   pipeline definition
 pyproject.toml        dependencies, tool settings and gate definition
 ```
 
-There is no separate build description. Dependencies live where pip already
-looks, tool settings live in each tool's own table, and `[tool.pybootstrap]`
-adds only the list of gates.
 ## Python REPL debugging session
 
 Inspect which implementation and extension were loaded:
@@ -80,7 +102,28 @@ Inspect which implementation and extension were loaded:
 >>> public
 >>> inspect.getmembers(lab, inspect.isfunction)
 >>> help(lab)
+>>> lab.has_native_extension()
+>>> task = lab.RelayTask("task-17", "inspect-frame", lab.TaskState.QUEUED)
+>>> frame = lab.render_task_frame(task)
+>>> implementation = lab.resolve_implementation(prefer_native=False)
+>>> digest = lab.describe_frame(frame, implementation=implementation)
+>>> digest.implementation, digest.payload_length == len(task.to_payload())
+('python', True)
 ```
 
-Compare the pure-Python and native callable signatures and module paths. A
-matching API does not mean their machine artifacts are portable.
+The example deliberately selects Python, even if the native module is
+available. Its result confirms the decoded length matches the task payload.
+Now compare that result with `prefer_native=True`, recording which module
+was actually selected. Matching values establish equivalence for this frame,
+not portability or a speed-up.
+
+The loader falls back on any `ImportError`, not only a missing extension file.
+A failed native import can therefore look like an unavailable extension.
+Inspect the native import when a build unexpectedly selects Python; a successful
+fallback does not establish that the native artifact is healthy.
+
+Finish when both paths agree where the native module is available, unavailable
+native execution is identified explicitly, malformed frames are rejected, and
+`pybootstrap check` exits 0. Keep measurement artifacts only as needed; remove
+only build outputs you created and deactivate the environment. There are no
+cloud resources to destroy.

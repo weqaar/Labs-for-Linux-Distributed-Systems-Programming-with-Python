@@ -58,7 +58,7 @@ Use `down --volumes` only when the lab explicitly asks for a clean store.
 | Capability | Azure | Local service |
 |---|---|---|
 | Blob, queue and table protocols | Azure Storage | Azurite |
-| Durable task records | Cosmos DB or Table Storage | PostgreSQL |
+| Durable job status | Cosmos DB or Table Storage | PostgreSQL |
 | Cache and short leases | Azure Managed Redis | Valkey |
 | Brokered work | Service Bus | RabbitMQ |
 | Logs, metrics and traces | Azure Monitor | OpenTelemetry Collector, Jaeger, Prometheus, Loki and Grafana |

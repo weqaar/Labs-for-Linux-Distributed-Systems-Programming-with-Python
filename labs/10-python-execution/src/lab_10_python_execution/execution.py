@@ -37,7 +37,7 @@ class AstNode:
 
 @dataclass(frozen=True, slots=True)
 class SourceReport:
-    """Tokenizer, AST, and module-code evidence for one source string."""
+    """Tokens, AST nodes and compiled names and constants for one source string."""
 
     tokens: tuple[SourceToken, ...]
     ast_root: str
@@ -57,7 +57,7 @@ class BytecodeInstruction:
 
 @dataclass(frozen=True, slots=True)
 class FunctionBytecode:
-    """Code-object and instruction evidence for one function."""
+    """A function's argument count, local names, constants and decoded instructions."""
 
     name: str
     positional_arguments: int
@@ -68,7 +68,7 @@ class FunctionBytecode:
 
 @dataclass(frozen=True, slots=True)
 class ArchitectureReport:
-    """Interpreter and native-boundary facts for the current process."""
+    """The current interpreter version, bytecode markers, host and extension suffixes."""
 
     implementation: str
     version: tuple[int, int, int]
@@ -138,7 +138,7 @@ def inspect_function(function: object) -> FunctionBytecode:
 
 
 def architecture_report() -> ArchitectureReport:
-    """Describe which artifacts are portable and which are target-native."""
+    """Return interpreter and host details used to assess artifact compatibility."""
 
     return ArchitectureReport(
         implementation=sys.implementation.name,

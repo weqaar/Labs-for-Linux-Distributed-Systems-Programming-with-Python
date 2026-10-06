@@ -114,7 +114,7 @@ def test_pydantic_validation_rejects_an_unknown_action_before_domain_code_runs()
             headers={"x-correlation-id": "corr-1", "x-relay-budget-ms": "100"},
         )
 
-    # Pydantic rejects an action outside the enum as a shape problem: 422, not
+    # Pydantic rejects an action outside the enum during model validation: 422, not
     # the domain-level 400 that ContractError would raise for the same field.
     assert response.status_code == 422
 

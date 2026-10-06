@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "lab-17-wire-format"
 version = "0.1.0"
-description = "Lab for the corresponding chapter of Linux Distributed Systems Programming with Python."
+description = "Test JSON field presence and message compatibility across Protobuf schema versions."
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [{ name = "Weqaar Janjua", email = "weqaar.janjua@packetfive.com" }]
@@ -51,15 +51,12 @@ coverage-package = "lab_17_wire_format"
 line-length = 100
 target-version = "py310"
 exclude = ["src/lab_17_wire_format/pb"]
-# Tells the import sorter that lab_17_wire_format is this project rather than a
-# third-party package. Without it a src layout has first-party imports grouped
-# with the dependencies, and the lint gate reports a sorting error on a file
-# nobody has touched.
+# Classify this src-layout package as first-party when sorting imports.
 src = ["src", "tests"]
 
 [tool.ruff.lint]
-# E and F are the pyflakes and pycodestyle core, I keeps imports sorted, UP
-# rewrites syntax that a newer Python made obsolete.
+# E checks pycodestyle errors, F checks Pyflakes rules, I checks import order,
+# and UP suggests syntax supported by the configured Python version.
 select = ["E", "F", "I", "UP"]
 
 [tool.pyright]
@@ -71,8 +68,7 @@ reportMissingTypeStubs = "none"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-# pythonpath lets the suite run straight after 'git clone', before anyone has
-# installed the project. Without it a src layout gives ModuleNotFoundError on a
-# fresh checkout, which reads as a broken project rather than a missing step.
+# Add src to pytest's import path. Dependencies still need to be installed;
+# this does not test whether a built wheel contains the package.
 pythonpath = ["src"]
 addopts = "--cov-report=term-missing --import-mode=importlib"

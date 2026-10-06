@@ -30,7 +30,7 @@ class TaskKey:
 
 @dataclass(frozen=True)
 class RelayTask:
-    """Stored relay task record."""
+    """Stored job status. The code calls this object a relay task."""
 
     key: TaskKey
     title: str

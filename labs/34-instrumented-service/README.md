@@ -1,17 +1,41 @@
 # Lab 34 Instrumented Service
 
-This checkpoint gives relay real OpenTelemetry Python instrumentation. It
-creates SDK `TracerProvider`, `MeterProvider`, and `LoggerProvider` instances,
-identifies relay with a `Resource`, records server and client spans, emits
-correlated log records, propagates W3C context and baggage, and measures
-request count and duration. Tests use the SDK's in-memory span and log
-exporters and metric reader. They do not need a collector, Azure account,
-network, or credentials.
+This lab records what happens while SigRaft handles a request. Its Python
+import name is `relay`; the program does not relay traffic.
+OpenTelemetry traces connect timed operations called spans, metrics count
+requests and measure duration, and logs record individual events. Shared
+trace identifiers let you find the logs belonging to one request.
+
+The implementation uses real OpenTelemetry SDK providers with in-memory
+exporters and a metric reader. Tests inspect their output without a collector,
+Azure account, network or credentials.
+
+## Goal and working order
+
+Follow one request across a service and dependency boundary using three
+different signals: traces, metrics and logs. You will inspect real SDK output
+from the provided instrumented handler before choosing an optional exporter.
+The handler is called directly in this lab; no HTTP listener or job executor
+is installed.
+
+Use Python 3.10 or later in this directory and read
+[`CODING_STANDARDS.md`](../CODING_STANDARDS.md) and `AGENTS.md`.
+OpenTelemetry API, SDK and OTLP gRPC exporters are declared in
+`pyproject.toml`; Azure Monitor is optional.
+
+1. Install and construct the in-memory runtime in the REPL.
+2. Run `pytest -q tests/test_lab_34_instrumented_service.py`. Trace the
+   server span, client child, correlated log and metric attributes in the
+   request test.
+3. Compare a sampled request with an unsampled inbound parent. Metrics must
+   still record the request; dropped traces do not mean missing traffic.
+4. Change a fake dependency outcome and inspect error status without exporting
+   sensitive request or exception data.
 
 ## Install and run the gates
 
 ```bash
-python -m venv .venv
+python3 -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev]"
 pybootstrap check
@@ -45,8 +69,8 @@ real SDK spans. The resource supplies `service.name`, `service.version`, and
 Use `TelemetryRuntime.in_memory(sample_ratio=1.0)` for deterministic tests.
 The sampler is parent based. An unsampled inbound parent remains unsampled,
 while metrics are still recorded. A ratio of `0.1` samples about one tenth of
-new root traces. Traces explain examples; metrics measure the whole traffic
-population.
+new root traces. Use traces to inspect sampled requests and metrics to count requests whether
+or not their traces were sampled.
 
 ## Send OTLP to a local collector and Jaeger
 
@@ -88,9 +112,14 @@ service:
       exporters: [debug]
 ```
 
+The YAML is a deployment fragment, not a collector started by this lab.
+To generate data, compose `InstrumentedRelayService` with the OTLP runtime
+and call `handle_request` using the request and fake dependency from the tests.
+Setting the environment variables alone sends nothing.
+
 Send metrics to a metric backend by adding a metric exporter and a `metrics`
 pipeline to the collector. Open Jaeger's search page, select the `relay`
-service, submit a task, and inspect `POST /tasks` with its
+service, invoke the handler, and inspect `POST /tasks` with its
 `relay.storage` child. The local gate intentionally constructs only in-memory
 providers, so an unavailable collector cannot make tests slow or flaky.
 
@@ -101,7 +130,7 @@ an orderly process stop so all three providers get a chance to flush.
 ## Python REPL debugging session
 
 Confirm that the installed package, public telemetry types and constructor
-match this checkpoint before inspecting an in-memory runtime:
+match this lab before inspecting an in-memory runtime:
 
 ```pycon
 >>> import inspect
@@ -122,8 +151,8 @@ True
 
 If the import path points at another checkout, leave the REPL, activate the
 intended environment and reinstall this lab. Inspect resource attributes rather
-than exporter internals because the resource is the supported identity boundary
-shared by traces, metrics and logs.
+than exporter internals: those attributes identify the service consistently in
+traces, metrics and logs.
 
 ## Send to Application Insights
 
@@ -184,13 +213,24 @@ remains on the selected request span for trace lookup, but not on metrics or
 logs. Deployments with sensitive tenant names should replace it with a
 controlled classification or omit it.
 
-## What the tests prove
+## What the tests check
 
 The tests inspect actual SDK `ReadableSpan`, `MetricsData`, and
 `ReadableLogRecord` values. They check resource identity, server and client
 kinds, parentage, error status, bounded metric dimensions, log severity and
 trace correlation, W3C propagation, baggage, parent-based sampling, quiet
 health routes, provider shutdown, exporter settings, and the Log Analytics
-query contract. This proves emission and causality. A staging synthetic
-request is still needed to prove that a collector and chosen backend ingest
-the data.
+query's required clauses. These checks inspect emitted values and trace parent
+relationships. Send a synthetic request in staging and locate its trace, metrics
+and logs in the chosen backends to verify ingestion.
+
+## Contribution and completion
+
+This lab demonstrates telemetry emission for the
+SigRaft job-orchestration web service. Lab 39 implements its own runtime with
+real SDK providers; it does not import this lab.
+Finish when you can relate all three signals without putting task IDs into
+metric labels, with `pybootstrap check` exit 0. Exit 1 means findings;
+exit 2 means a gate could not run. Always call `runtime.shutdown()`.
+Stop collectors or local-stack services you started, and remove only owned
+Azure resources after optional live validation.

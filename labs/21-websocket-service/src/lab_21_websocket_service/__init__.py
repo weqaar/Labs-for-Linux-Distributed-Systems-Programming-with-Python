@@ -1,4 +1,4 @@
-"""WebSocket event streaming for the relay task service."""
+"""WebSocket event streaming for the relay job-management service."""
 
 from __future__ import annotations
 

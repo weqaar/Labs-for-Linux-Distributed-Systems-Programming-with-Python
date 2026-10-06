@@ -274,8 +274,7 @@ def test_fit_duration_model_on_the_bundled_fixture_shows_the_confound() -> None:
     frame = observations_to_frame(report.observations)
     result = fit_duration_model(frame)
 
-    # Documented in the chapter: omitting region from this particular sample
-    # flips the sign of the queue-depth coefficient, which is why the report
-    # keeps both numbers rather than only the first fit.
+    # Omitting region from this sample flips the queue-depth coefficient's
+    # sign, so the report keeps both numbers rather than only the first fit.
     assert result.queue_depth_coefficient_ms < 0
     assert result.queue_depth_coefficient_with_region_control_ms > 0

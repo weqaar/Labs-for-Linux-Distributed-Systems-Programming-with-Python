@@ -95,12 +95,12 @@ def test_settings_default_to_forcing_the_usage_stats_opt_out() -> None:
 
 
 def test_start_local_cluster_forces_usage_stats_opt_out_by_default() -> None:
-    """The default gate must be deterministic regardless of a dirty parent env.
+    """Disable startup telemetry even when the parent environment enables it.
 
     A plain ``os.environ.setdefault`` would leave an already-set variable
     alone; forcing it unconditionally while ``ray.init()`` runs, then
     restoring whatever was there before, is what makes the offline gate's
-    telemetry posture the same on every run, not only on a clean shell.
+    telemetry setting the same on every run, not only in an unconfigured shell.
     ``ray.init`` is patched so this exercises the real env-handling logic
     without starting a second real cluster alongside the module fixture's.
     """
@@ -286,7 +286,7 @@ def test_settled_task_id_reused_with_a_different_fingerprint_is_rejected(
 
     # The ledger, not this pool's own memory, is what still remembers
     # task-152's original fingerprint and rejects the mismatch. ``drain``
-    # also proves the rejected reference does not linger as pending state.
+    # also checks that the rejected reference does not remain pending.
     with pytest.raises(TaskFingerprintConflictError):
         compute_pool.drain()
     assert not compute_pool.pending()
@@ -316,7 +316,7 @@ def test_ledger_state_reserve_replay_conflict_and_eviction_run_directly() -> Non
     Everything a Ray actor runs happens in its own worker process, invisible
     to coverage measurement in the driver. ``_LedgerState`` is deliberately a
     plain, undecorated class for exactly this reason: it can be instantiated
-    and driven directly here, in-process, to prove out its reservation,
+    and driven directly here, in-process, to check its reservation,
     replay, conflict and bounded-eviction rules without any Ray runtime at
     all, while ``_IdempotencyLedger`` wraps the same class for the cluster.
     """
@@ -356,7 +356,7 @@ def test_ledger_state_reserve_replay_conflict_and_eviction_run_directly() -> Non
 
     # Exceeding max_entries forgets the oldest settled entry (task-1), so a
     # later resubmission under a different fingerprint is accepted rather
-    # than rejected: eviction, not luck, is what allows it.
+    # than rejected because eviction removed its earlier fingerprint.
     ledger.reserve("task-3", "index:target-d")
     ledger.record(
         ComputeOutcome(id="task-3", action=TaskAction.INDEX, state=TaskState.SUCCEEDED, attempts=1)
@@ -387,7 +387,7 @@ def test_execute_called_directly_waits_when_already_in_progress(
 ) -> None:
     """Drive ``_execute`` itself into its ``in_progress`` branch directly.
 
-    The cross-pool concurrency test above proves this branch matters, but
+    The cross-pool concurrency test above exercises this branch, but
     the losing attempt runs inside a dispatched Ray task there, invisible to
     coverage. Reserving the task ID first, without recording an outcome,
     and then calling ``_execute`` directly for the same ID makes this
@@ -529,7 +529,7 @@ def test_ledger_state_is_bounded_by_a_tested_capacity_policy(
 
         # task-901 was the oldest entry and is no longer retained, so a
         # resubmission under a different fingerprint is accepted rather than
-        # rejected as a conflict: the eviction, not luck, is what allows it.
+        # rejected as a conflict because eviction removed its earlier fingerprint.
         replacement = make_submission("task-901", target="blob://relay/inbox/replacement")
         outcome = ray.get(pool.submit(replacement))
         assert outcome.state is TaskState.SUCCEEDED

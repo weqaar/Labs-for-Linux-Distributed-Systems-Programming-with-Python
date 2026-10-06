@@ -1,4 +1,4 @@
-"""A small relay HTTP shape used by the deployment checkpoint."""
+"""A small relay HTTP service with submission and health endpoints."""
 
 from __future__ import annotations
 

@@ -1,20 +1,44 @@
 # Lab 04 CLI Tool
 
-`relayctl` is a Typer command that calls a REST service through an injected
-HTTPX transport. It owns explicit timeouts, a bounded retry policy and the
-mapping from HTTP outcomes to command exit codes.
+`relayctl status` asks a web service for a job's current state. Typer handles
+command-line arguments; an HTTPX client makes the request. The client sets
+timeouts and retry limits, and the command translates the result into output
+and an exit code.
+
+## Goal and purpose
+
+Make an operator command fail predictably when the service times out,
+returns malformed data or reports a missing job. This lab provides a
+status client, not a server or a submit command. It contributes the CLI,
+configuration and bounded read retries to the SigRaft job-management web service;
+the final `sigraftctl` is a separate implementation.
+
+Use Python 3.10 or later in this directory and read
+[`CODING_STANDARDS.md`](../CODING_STANDARDS.md) and `AGENTS.md`.
+Typer parses commands, HTTPX sends HTTP requests and supplies mock transports,
+and the standard library reads configuration. Dependencies are declared in `pyproject.toml`.
+Use a separate environment because Lab 02 also installs a command named
+`relayctl` with different behavior.
+
+1. Install, inspect `settings.py`, and run the help and config commands below.
+2. Inspect the retry policy in the REPL. Run
+   `pytest -q tests/test_lab_04_cli_tool.py` and trace the injected timeout,
+   503 response and success. The recorded delays must be 0.25 and 0.5 seconds;
+   the test does not actually sleep.
+3. Change a response in a local test to 404 and verify exit 1, then to invalid
+   JSON and verify a command error. Do not add retries to writes without an
+   idempotency contract.
 
 ## Getting started
 
 ```bash
-python -m venv .venv && source .venv/bin/activate
+python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 ```
 
 ## Quality gates
 
-The same command runs on a laptop and in CI, so a failure is always
-reproducible:
+Run the configured checks before considering the lab complete:
 
 ```bash
 pybootstrap check
@@ -39,11 +63,10 @@ pytest
 |---|---|
 | 0 | Every gate passed |
 | 1 | A gate ran and found problems |
-| 2 | A gate could not run, so nothing was checked |
+| 2 | A gate could not run and supplied no verdict |
 
-The split between 1 and 2 is the point. A missing or misconfigured tool is not
-the same as clean code, and a pipeline that treats them alike will eventually
-report success while checking nothing.
+Fix findings reported by exit 1. For exit 2, repair the tool or its
+configuration and rerun it; an unavailable check cannot establish a pass.
 
 ## Layout
 
@@ -53,15 +76,22 @@ tests/                the test suite
 pyproject.toml        dependencies, tool settings and gate definition
 ```
 
-There is no separate build description. Dependencies live where pip already
-looks, tool settings live in each tool's own table, and `[tool.pybootstrap]`
-adds only the list of gates.
 
 ## Try the command
 
 ```bash
 relayctl --help
 relayctl config
+```
+
+Help lists the available commands. Config shows where settings came from
+without printing the token. Neither command needs a running job service.
+
+The following optional calls require a separately running compatible service
+and an existing `task-17`. This lab does not start that service. The default
+test path uses fakes and requires neither credentials nor Azure.
+
+```bash
 RELAY_TOKEN=development relayctl --url http://127.0.0.1:8080 status task-17
 RELAY_TOKEN=development relayctl --url http://127.0.0.1:8080 status task-17 --json
 ```
@@ -70,6 +100,12 @@ The tests use `typer.testing.CliRunner` and `httpx.MockTransport`. They exercise
 the command and REST client together without opening a socket. The retry test
 injects a timeout, a 503 and a successful response, replaces sleep with a list,
 and asserts the exact exponential delays.
+
+The bounds apply to HTTP operations and retry count, not total elapsed command
+time. This client does not interpret `Retry-After` or expose a public close
+method. Those are additional requirements for a long-lived client, not
+features demonstrated by this command.
+
 ## Python REPL debugging session
 
 After the editable install, inspect the package actually loaded by Python:
@@ -83,7 +119,19 @@ After the editable install, inspect the package actually loaded by Python:
 >>> [(name, type(getattr(lab, name)).__name__) for name in public]
 >>> inspect.getmembers(lab, inspect.isclass)
 >>> help(lab)
+>>> from lab_04_cli_tool.client import RetryPolicy
+>>> policy = RetryPolicy(attempts=3, base_delay=0.25, max_delay=1.0)
+>>> inspect.signature(policy.delay)
 ```
 
-Inspect the CLI construction callable and one command callback before invoking
-the same behavior through the command-line parser.
+The policy object records retry limits; constructing it sends no request.
+Follow `RelayClient.task` and the `status` callback to see where those limits
+are used and where the result becomes command output.
+
+## Completion and cleanup
+
+Finish when you can explain settings precedence, redaction, transport errors
+and retry limits, and `pybootstrap check` exits 0. The gate exit codes above
+describe checker results; the CLI has its own error mapping tested separately.
+No listener or cloud resource is created by the fake tests. Deactivate this
+environment before moving to another lab's `relayctl`.

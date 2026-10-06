@@ -1,18 +1,39 @@
 # Lab 24 Raft Election
 
-Deterministic Raft leader-election checkpoint for the relay task service.
+## Goal and activities
+
+Explain how terms, voting rules and a majority select a leader under a chosen
+failure schedule. You will advance a supplied simulation, not start Raft
+processes or configure a production cluster.
+Use Python 3.10 or later in this directory and read
+[`CODING_STANDARDS.md`](../CODING_STANDARDS.md) and `AGENTS.md`.
+Raft is a protocol that elects one leader and copies an ordered log. The
+simulation uses standard-library values and in-memory state; all development
+dependencies are declared in `pyproject.toml`.
+
+A term identifies an election period. A follower may become a candidate after
+its timeout, but becomes leader only after receiving a majority of votes.
+Remembering a vote prevents the same node from voting for two candidates in
+one term.
+
+1. Install and trigger an election in the REPL.
+2. Run `pytest -q tests/test_lab_24_raft_election.py`. Trace a vote across
+   `restart_node`, then a higher term forcing step-down.
+3. Partition four nodes into two pairs, trigger each timeout, heal the
+   partition and trigger a later timeout. Neither pair alone has a majority.
+4. Change the timeout order in a test and explain which observations, rather
+   than elapsed wall time, caused the result.
 
 ## Getting started
 
 ```bash
-python -m venv .venv && source .venv/bin/activate
+python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 ```
 
 ## Quality gates
 
-The same command runs on a laptop and in CI, so a failure is always
-reproducible:
+Run the configured checks before considering the lab complete:
 
 ```bash
 pybootstrap check
@@ -37,11 +58,10 @@ pytest
 |---|---|
 | 0 | Every gate passed |
 | 1 | A gate ran and found problems |
-| 2 | A gate could not run, so nothing was checked |
+| 2 | A gate could not run and supplied no verdict |
 
-The split between 1 and 2 is the point. A missing or misconfigured tool is not
-the same as clean code, and a pipeline that treats them alike will eventually
-report success while checking nothing.
+Fix findings reported by exit 1. For exit 2, repair the tool or its
+configuration and rerun it; an unavailable check cannot establish a pass.
 
 The dev extra installs the public pybootstrap project and its gate tools from
 GitHub, so a fresh clone receives the same quality runner used by every lab.
@@ -49,17 +69,17 @@ GitHub, so a fresh clone receives the same quality runner used by every lab.
 ## Simulation focus
 
 The package models follower, candidate and leader roles over a scripted network.
-Tests drive the randomised election outcome by choosing which node's timeout
+Tests choose the election order by selecting which node's timeout
 fires next. They cover:
 
-- one durable vote per term, even across restart
+- one vote per term retained across a simulated node restart
 - split-vote recovery on a later timeout
 - higher-term step-down
 - minority partitions failing to elect a leader
 
-For a production relay scheduler on Azure, I would still deploy a managed lease
-for single-leader selection. This lab keeps Raft because it teaches the stronger
-mechanism the managed service is built on.
+The restart reuses a Python `PersistentVoteState`; it does not fsync a disk
+record or survive loss of the Python process. No claim about a managed Azure
+service's internal consensus implementation follows from this simulation.
 
 ## Layout
 
@@ -69,9 +89,6 @@ tests/                the test suite
 pyproject.toml        dependencies, tool settings and gate definition
 ```
 
-There is no separate build description. Dependencies live where pip already
-looks, tool settings live in each tool's own table, and `[tool.pybootstrap]`
-adds only the list of gates.
 ## Python REPL debugging session
 
 After the editable install, inspect node state:
@@ -84,7 +101,21 @@ After the editable install, inspect node state:
 >>> public
 >>> inspect.getmembers(lab, inspect.isclass)
 >>> help(lab)
+>>> cluster = lab.DeterministicRaftCluster(("n1", "n2", "n3"))
+>>> result = cluster.trigger_timeout("n1")
+>>> result.became_leader, result.term
+(True, 1)
+>>> cluster.node("n1").role is lab.NodeRole.LEADER
+True
 ```
 
-Construct the smallest cluster, inspect one node's term and role, and inspect
-the election-step signature before advancing the deterministic schedule.
+The selected timeout starts term one and enough nodes grant votes for `n1`
+to become leader. No wall-clock wait caused that result. Use a partitioned
+test next to see the same timeout fail when a majority cannot be reached.
+
+These elections show why a SigRaft job-orchestration web service needs a
+majority before choosing a coordinator. Lab 39 does not import this cluster
+or run consensus merely by listing it in release records.
+Finish with demonstrated split-vote recovery and higher-term step-down, and
+`pybootstrap check` exit 0. Exit Python to discard the simulated nodes; no
+network or Azure resources were created.

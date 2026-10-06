@@ -1,24 +1,42 @@
 # Lab 03 Quality Gate
 
-This checkpoint adds honest quality gate evidence for the same relay
-product. It models the outcomes that protect `relayctl` and the `/tasks`
-service from a lying pipeline: pass, fail and error.
+This lab records whether a check passed, found a problem or could not
+run. These are different outcomes: a missing checker supplies no evidence
+about the code. The package converts those outcomes into exit codes and
+JUnit XML that a continuous integration system can publish. The Python
+import name in this lab is `relay`. That name does not mean the program
+relays traffic.
 
 ## Capability added here
 
-- classify a relay gate as passed, failed or errored
-- render JUnit XML with `<failure>` for real findings and `<error>` when a
-  tool never ran
-- keep the overall exit code honest so `error` outranks `failure`
-- publish the same evidence shape that Azure Pipelines can gate on
-- gate the installed quality API's documentation, examples and local preview
-  so the completed SigRaft product can retain checked reader-facing evidence
+- classify each quality check as passed, failed or errored
+- render JUnit XML with `<failure>` for findings and `<error>` when a
+  tool could not produce a valid verdict
+- keep the overall exit code accurate so `error` outranks `failure`
+- publish JUnit results that Azure Pipelines can display and use to reject a build
+- build the installed quality API's documentation, execute its examples and
+  retrieve its local preview, practising checks also needed for SigRaft's docs
 
-Example relay-focused flow:
+## Goal and working order
 
-```text
+Learn to distinguish a check that found a defect from a tool that never checked
+anything. You will inspect the Python objects that represent a check result, exercise fake process
+outcomes, and add executable documentation. This is release tooling for the
+SigRaft job-management web service, not a running job server or CLI.
+
+Use Python 3.10 or later in this directory and read
+[`CODING_STANDARDS.md`](../CODING_STANDARDS.md) and `AGENTS.md`. The runtime
+uses dataclasses, subprocess and XML from Python's standard library. Sphinx and
+the gate tools are declared development dependencies; MkDocs is optional.
+Installation may download tools, but local validation needs no subscription.
+
+1. Install below, then inspect `quality.py` and its test fake runner.
+2. Run `pytest -q tests/test_lab_03_quality_gate.py`. Trace one pass, one
+   finding and one missing-tool result into `GateReport.to_junit_xml`.
+3. Complete the documentation exercises and retain JUnit evidence:
+
+```bash
 pybootstrap check --junit-dir .quality
-relayctl submit --task-id task-17 --action rebuild-search-index
 ```
 
 Azure Pipelines can then publish `.quality/*.xml` and fail closed on both
@@ -27,7 +45,7 @@ failures and errors.
 ## Getting started
 
 ```bash
-python -m venv .venv && source .venv/bin/activate
+python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 ```
 
@@ -58,14 +76,22 @@ After the editable install, inspect the package actually loaded by Python:
 >>> [(name, type(getattr(lab, name)).__name__) for name in public]
 >>> inspect.getmembers(lab, inspect.isclass)
 >>> help(lab)
+>>> suite = lab.relay_quality_suite()
+>>> inspect.signature(suite.run)
+>>> [command.name for command in suite.commands]
+['format', 'lint', 'types', 'test']
 ```
 
-Inspect one callable signature and compare a raised application failure with a
-missing checker command. The two failures must remain distinguishable.
+The list contains commands, not their results. Calling `suite.run` executes
+them through the supplied runner. In the tests, that runner returns controlled
+outcomes so you can inspect a finding and a missing checker separately.
 
-## Documentation is executable evidence
+## Build the documentation and execute its examples
 
-The `dev` extra declares Sphinx in `pyproject.toml`. From this lab directory:
+The same distinction applies to documentation: a wrong example is a finding,
+while a builder that cannot start supplies no result. The `dev` extra declares
+Sphinx in `pyproject.toml`. Build the guide, execute its examples and preview
+the resulting pages from this lab directory:
 
 ```bash
 python -m sphinx -n -W --keep-going -b html docs build/docs/html
@@ -133,5 +159,12 @@ replace those checks. Stop the preview with Ctrl-C; MkDocs is not a default gate
 `pybootstrap check` must exit 0. Its pytest gate must build HTML and doctests,
 reject every seeded documentation defect and finish the loopback HTTP smoke
 test. Your documentation exercise must also pass the two direct Sphinx commands.
-Retain the existing JUnit tests proving pass, failure, error and error precedence.
+Retain the existing JUnit tests checking pass, failure, error and error precedence.
 No subscription or external service is needed for this evidence.
+
+Explain why a missing executable becomes `<error>` rather than `<failure>`,
+and why an incomplete suite cannot pass. Exit 1 means a gate found problems;
+exit 2 means a gate could not run and supplied no verdict. Lab 39 retains these
+release principles, not an import of this package. Stop local previews and
+remove scratch documentation copies after the exercise; retain `.quality`
+only as long as its evidence is useful.

@@ -1,4 +1,4 @@
-"""Checkpoint 03 for relay: honest JUnit gate evidence for `/tasks`."""
+"""Run relay quality checks and report findings separately from checker errors."""
 
 from __future__ import annotations
 
@@ -34,7 +34,7 @@ class GateOutcome(str, Enum):
 
 @dataclass(frozen=True)
 class GateCommand:
-    """A single gate command for relay quality evidence."""
+    """A named check with its command arguments and purpose."""
 
     name: str
     argv: tuple[str, ...]
@@ -63,7 +63,7 @@ class GateResult:
 
 
 class CommandRunner(Protocol):
-    """Protocol boundary between quality logic and process execution."""
+    """Interface for executing a command and capturing its result."""
 
     def run(self, argv: tuple[str, ...]) -> ProcessResult:
         """Run *argv* and capture its exit code and output."""
@@ -134,7 +134,7 @@ class GateSuite:
     commands: tuple[GateCommand, ...]
 
     def run(self, runner: CommandRunner) -> GateReport:
-        """Run every command through the injected process boundary."""
+        """Run every command with the supplied runner and collect its verdict."""
         return GateReport(
             suite_name=self.suite_name,
             results=tuple(run_gate(command, runner) for command in self.commands),

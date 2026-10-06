@@ -1,21 +1,12 @@
 """Capability-detected PCI device topology and placement helpers.
 
-These functions read the same kind of Linux PCI and IOMMU sysfs trees that
-`numa.py` reads for CPU nodes; nothing here calls a vendor GPU runtime.
-`PciFunction` is the general record produced by walking that tree: a bus
-address, a NUMA affinity hint inherited from the root complex it hangs off,
-an IOMMU isolation group, and the ancestor bridges that help decide whether
-a peer function sits close enough for direct device-to-device DMA.
-`AcceleratorDevice` names that same record once its class code has already
-been confirmed to be a GPU or dedicated accelerator; a network adapter
-discovered the same way is a `PciFunction` with a network-controller class
-code, never an `AcceleratorDevice`, because it was never filtered as one.
-Bridge ancestry is only ever a topology estimate here; PCIe Access Control
-Services, platform routing tables and firmware policy can each still
-override what the ancestry alone would suggest, as the functions below note
-where that applies. The functions below model those boundaries as plain data
-so a placement or a readiness check can be tested with a fixture tree rather
-than real hardware.
+Read Linux PCI and IOMMU sysfs trees without calling a vendor GPU runtime.
+Discovery returns device addresses, class codes, NUMA hints and ancestor paths;
+IOMMU group membership is queried separately. Tests can supply fixture trees.
+
+Transfer plans estimate device locality, not whether DMA will work. PCIe
+Access Control Services, routing and firmware can prevent a path that looks
+suitable from its ancestor directories.
 """
 
 from __future__ import annotations
@@ -79,10 +70,8 @@ def is_accelerator_class(class_code: str) -> bool:
 def is_network_class(class_code: str) -> bool:
     """Return whether a PCI class code names a network controller.
 
-    This covers an ordinary Ethernet NIC as well as an InfiniBand or
-    RoCE-capable host channel adapter; all report PCI base class 0x02. It
-    exists so a network endpoint can be discovered and typed on its own
-    terms rather than reused from the accelerator-only discovery path.
+    PCI base class 0x02 includes Ethernet, InfiniBand and RoCE-capable network
+    adapters. Use this filter rather than the accelerator filter to find them.
     """
 
     normalized = class_code.strip().lower().removeprefix("0x")
@@ -93,11 +82,9 @@ def is_network_class(class_code: str) -> bool:
 class PciFunction:
     """One PCI function discovered under a sysfs device tree.
 
-    This record makes no claim about what kind of device the function is;
-    a GPU, a network adapter and a storage controller all produce the same
-    shape. `AcceleratorDevice` is this same type under a name that signals
-    the class code has already been checked and confirmed to be an
-    accelerator.
+    GPUs, network adapters and storage controllers use the same fields.
+    Inspect class_code to distinguish them. AcceleratorDevice is an alias
+    for this class, not a runtime check of the device kind.
     """
 
     address: PciAddress
@@ -112,10 +99,7 @@ class PciFunction:
         return self.numa_node >= 0
 
 
-# A GPU or dedicated accelerator is a PciFunction whose class code has been
-# confirmed by `is_accelerator_class`; the topology and placement math below
-# is identical for any PCI function, so this is a naming alias, not a
-# separate type a caller needs to convert between.
+# The alias names accelerator-filtered results without requiring type conversion.
 AcceleratorDevice = PciFunction
 
 
@@ -126,9 +110,7 @@ class PciTopology:
     devices: tuple[PciFunction, ...]
 
 
-# The result of `discover_accelerator_topology` specifically, kept as its
-# own name for readability at call sites that only ever expect GPUs or
-# dedicated accelerators, such as `plan_accelerator_workers`.
+# Placement callers use this alias for accelerator-filtered discovery results.
 AcceleratorTopology = PciTopology
 
 
@@ -139,15 +121,14 @@ def discover_pci_topology(
 ) -> PciTopology:
     """Walk a PCI device tree and collect functions matching a class filter.
 
-    The tree mirrors what Linux exposes under `/sys/devices/pciDOMAIN:BUS`:
-    root ports and switches nest as directories, and each PCI function is a
-    directory carrying `vendor`, `device`, `class` and `numa_node` files. A
-    directory without those files is a bridge; it never becomes a device,
-    but its bus address still contributes to the ancestor path later used
-    for locality decisions. `discover_accelerator_topology` and
-    `discover_network_topology` are this function with `class_filter` fixed
-    to `is_accelerator_class` and `is_network_class` respectively; call this
-    one directly for any other class of interest.
+    Under root, device directories must contain vendor, device and class
+    files. Missing numa_node files produce a node value of -1. Directories
+    without a vendor file are skipped as devices but remain in descendants'
+    ancestor paths. A missing root returns an empty topology.
+
+    The default filter selects accelerator class codes. Supply another
+    class_filter, or use discover_network_topology, to select other devices.
+    Read and parse errors in discovered files propagate to the caller.
     """
 
     devices: list[PciFunction] = []
@@ -194,12 +175,9 @@ def discover_accelerator_topology(
 def discover_network_topology(root: Path = Path("/sys/devices")) -> PciTopology:
     """Walk a PCI device tree and collect network controller functions.
 
-    This is the typed discovery path for the network-adapter side of a
-    transfer plan. It reads the same sysfs tree as
-    `discover_accelerator_topology`, filtered to `is_network_class` instead,
-    so a NIC or host channel adapter is discovered and typed on its own
-    terms rather than reused from a code path that has already committed to
-    treating its result as an accelerator.
+    Use these records for the network-adapter input to plan_transfer.
+    The traversal is shared with discover_accelerator_topology, but uses
+    is_network_class rather than the accelerator class filter.
     """
 
     return discover_pci_topology(root, class_filter=is_network_class)
@@ -211,17 +189,14 @@ def discover_iommu_group(
 ) -> tuple[str, ...]:
     """Return sibling PCI addresses sharing one IOMMU isolation group.
 
-    The IOMMU translates a device's bus address to a physical address
-    before a DMA engine reaches memory, and Linux's VFIO framework groups
-    together every function whose transactions the platform cannot fully
-    separate from one another. Every function inside one group must be
-    assigned together; a device that shares a group with an unrelated
-    function cannot be isolated on its own. Group membership is necessary
-    information for planning a safe passthrough, not a certificate that a
-    single-device group is automatically safe to hand to an unprivileged
-    workload: that also depends on the guest or container's own driver and
-    kernel confinement, and on device firmware neither the IOMMU nor this
-    function inspects.
+    Read group membership below root and return sorted addresses, including
+    the requested address. Return an empty tuple when no group is found.
+
+    Linux VFIO treats a group as one isolation unit because the platform cannot
+    fully separate its functions' transactions. Do not assign members to
+    mutually untrusted owners. A single-device group alone does not establish
+    safe passthrough: drivers, kernel confinement and firmware also matter,
+    and this function checks none of them.
     """
 
     target = str(address)
@@ -257,20 +232,14 @@ def peer_to_peer_feasible(
 ) -> bool:
     """Estimate topology adjacency for a peer-to-peer DMA path.
 
-    This checks only whether two PCI functions share enough bridge
-    ancestry to be topologically close, which is a necessary condition for
-    peer-to-peer DMA, not a sufficient one. Neither argument needs to be an
-    accelerator specifically; the same adjacency estimate applies to any
-    pair of PCI functions, which is why a network adapter is accepted here
-    as the general `PciFunction` record it actually is, not as an
-    `AcceleratorDevice` it never was classified to be. Even directly under
-    the same switch, a downstream port with PCIe Access Control Services
-    (ACS) enabled redirects a peer-to-peer transaction up to the root
-    complex for IOMMU checking rather than letting the switch route it
-    directly; pass `acs_redirect_enabled=True` when that is known to be the
-    case. Platform routing tables and firmware policy can each still block
-    a path this estimate calls feasible, so confirm the real path on
-    hardware before relying on it.
+    Accept any two PciFunction records. Return False for different recorded
+    roots or known ACS redirection; otherwise compare the shared ancestor
+    count with min_shared_bridges. These are directory-path comparisons, not
+    measurements of a PCIe switch.
+
+    Set acs_redirect_enabled when Access Control Services redirects peer
+    transactions toward the root complex. A True result does not check device
+    support, platform routing or firmware policy; verify the path on hardware.
     """
 
     if acs_redirect_enabled:
@@ -282,7 +251,7 @@ def peer_to_peer_feasible(
 
 @dataclass(frozen=True, slots=True)
 class TransferPlan:
-    """Whether a GPU-NIC transfer can bypass host memory or must stage."""
+    """Estimated transfer mechanism and optional host-staging NUMA node."""
 
     mechanism: str
     staging_numa_node: int | None
@@ -297,16 +266,14 @@ def plan_transfer(
 ) -> TransferPlan:
     """Choose between a peer-to-peer path and a host-staged path.
 
-    A peer-to-peer path moves data straight from the network adapter's DMA
-    engine into device memory, which is the on-board memory a GPU exposes as
-    its own separate address space rather than ordinary host RAM. When the
-    topology estimate cannot support that path, the fallback reads into a
-    page-locked host-pinned buffer on the NIC's own NUMA node, then issues a
-    second DMA into device memory. Host-pinned memory exists for exactly
-    this case: pages a DMA engine can address directly because the kernel
-    has promised not to move or swap them mid-transfer. This is still only
-    an estimate; see `peer_to_peer_feasible` for what it does and does not
-    check.
+    Return peer_to_peer when the topology estimate passes. Otherwise return
+    host_staged with nic.numa_node, which can be -1 when its locality is unknown.
+    This function neither allocates memory nor initiates a transfer.
+
+    A real peer transfer writes directly to device memory. Host staging instead
+    uses a pinned host buffer, whose pages stay resident during DMA, followed
+    by a second transfer to the device. See peer_to_peer_feasible for the
+    estimate's limitations.
     """
 
     if peer_to_peer_feasible(
@@ -329,22 +296,14 @@ class FabricKind(Enum):
 def requires_ethernet_congestion_policy(fabric: FabricKind) -> bool:
     """Return whether a fabric needs an explicit Ethernet congestion policy.
 
-    RoCEv2 carries RDMA transport over ordinary UDP and Ethernet, so a site
-    running it must decide, on purpose, whether priority flow control and
-    explicit congestion notification are part of its design, the approach
-    DCQCN popularized, or whether it instead accepts an ordinary lossy
-    Ethernet fabric and relies on the network adapter's own retransmission,
-    the approach the Improved RoCE NIC design demonstrated works without
-    priority flow control at all. Either way, that decision is specifically
-    an Ethernet congestion policy, because RoCEv2's transport is Ethernet.
-    Native InfiniBand's credit-based, link-level flow control is built into
-    the fabric itself, so it never needs that particular decision; it is not
-    carried over Ethernet, so there is no Ethernet congestion policy for it
-    to have. That is a narrower claim than saying InfiniBand needs no
-    congestion engineering at all: sizing buffer credits and switch
-    bisection bandwidth for the traffic pattern in use is still real work an
-    InfiniBand operator has to do, just not through PFC, ECN or an MTU
-    chosen for Ethernet congestion behavior.
+    Return True for RoCEv2, which carries RDMA over UDP/IP and Ethernet.
+    Its operator must choose how to handle congestion, for example with
+    priority flow control and explicit congestion notification, or with a
+    loss-tolerant design such as Improved RoCE NIC (IRN).
+
+    Return False for native InfiniBand because it does not use Ethernet.
+    InfiniBand still needs congestion engineering, including buffer-credit
+    and bandwidth planning; False does not mean that no policy is needed.
     """
 
     return fabric is FabricKind.ROCE_V2
@@ -354,14 +313,11 @@ def requires_ethernet_congestion_policy(fabric: FabricKind) -> bool:
 class RoceCongestionPolicy:
     """One site's chosen congestion-control design for a RoCEv2 fabric.
 
-    RoCEv2 mandates neither priority flow control, nor explicit congestion
-    notification, nor a minimum MTU. A site running the DCQCN-style design
-    commonly requires the first two and tunes an MTU to match its switch
-    buffer thresholds. A site running a lossy, retransmission-based design
-    such as IRN can reasonably require neither flow-control mechanism and
-    rely on the adapter's own recovery path instead. This dataclass records
-    whichever design a site has actually adopted rather than assuming the
-    DCQCN choices are a universal protocol requirement.
+    Supply the site's requirements for priority flow control, explicit
+    congestion notification and minimum MTU in bytes. They are deployment
+    choices, not universal RoCEv2 requirements. Data Center Quantized
+    Congestion Notification (DCQCN) deployments commonly use both mechanisms;
+    loss-tolerant designs such as IRN can use different requirements.
     """
 
     priority_flow_control_required: bool
@@ -385,17 +341,12 @@ def diagnose_roce_readiness(
 ) -> tuple[str, ...]:
     """List reasons an observed RoCEv2 path does not meet one site's policy.
 
-    This checks a fabric against the congestion-control design a site has
-    actually chosen; it does not treat priority flow control, explicit
-    congestion notification or any particular MTU as a fixed protocol rule.
-    A site running a lossy, retransmission-based design can supply a policy
-    that requires none of the flow-control settings, and this function will
-    not report a problem for their absence. None of these problems show up
-    as a connection failure. They show up later, as a retransmission stall
-    under load or as a priority flow control watchdog disabling a queue
-    after sustained congestion, so a deterministic check against the site's
-    own policy is worth more than a live probe that only exercises the idle
-    path.
+    Compare supplied settings with policy and return a tuple of diagnostic
+    strings, empty when the checked settings comply. Disabled flow-control
+    mechanisms are not reported when the policy does not require them.
+
+    No network probe runs. Passing these checks does not measure behavior under
+    load; congestion problems can remain invisible to an idle connection test.
     """
 
     problems: list[str] = []
@@ -422,7 +373,7 @@ def diagnose_roce_readiness(
 
 @dataclass(frozen=True, slots=True)
 class AcceleratorWorkerPlacement:
-    """One worker's assigned accelerator and the NUMA node it satisfies."""
+    """One worker's assigned accelerator address and recorded NUMA node."""
 
     worker_index: int
     device_address: str
@@ -435,16 +386,16 @@ def plan_accelerator_workers(
     *,
     single_numa_node: bool = True,
 ) -> tuple[AcceleratorWorkerPlacement, ...]:
-    """Assign one accelerator per worker, modeling the kubelet Topology Manager.
+    """Assign one accelerator per worker using the supplied topology.
 
-    The Kubernetes device plugin API advertises accelerators as extended
-    resources that a pod spec requests by count; kubelet's Topology Manager
-    then aligns CPU, memory and device resources to the same NUMA node
-    before admitting the pod. The `single-numa-node` policy this function
-    defaults to rejects a request it cannot satisfy from one node rather
-    than spreading it across nodes and accepting the cross-node latency
-    silently. Passing `single_numa_node=False` models the more permissive
-    `none` policy, which admits the pod without any alignment guarantee.
+    With single_numa_node=True, select the first recorded node with enough
+    devices, or raise ValueError. Otherwise select devices across nodes.
+    Workers must be positive and no greater than the available device count.
+
+    This illustrates one locality choice made by kubelet's Topology Manager,
+    not its complete admission algorithm. It does not align CPUs or memory,
+    reserve devices, or reject the unknown-node value -1. Callers needing
+    known locality must check discovery results before planning.
     """
 
     if workers <= 0:

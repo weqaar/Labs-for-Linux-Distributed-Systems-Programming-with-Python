@@ -49,13 +49,13 @@ class UnknownEnvironmentVariableError(ValueError):
 
 
 class StrictBoundaryModel(BaseModel):
-    """Base model for strict relay boundaries."""
+    """Validate declared relay fields and reject additional fields."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
 
 class ForwardCompatibleBoundaryModel(BaseModel):
-    """Base model for message boundaries that keep unknown fields."""
+    """Validate declared message fields while retaining additional fields."""
 
     model_config = ConfigDict(extra="allow", frozen=True)
 
@@ -181,7 +181,7 @@ def validation_error_response(error: ValidationError) -> ValidationErrorResponse
 
 
 def boundary_json_schemas() -> dict[str, dict[str, Any]]:
-    """Return stable JSON Schemas for the relay boundaries."""
+    """Return JSON Schemas for settings, tasks, events and validation-error responses."""
 
     return {
         "TaskSubmission": TaskSubmission.model_json_schema(),

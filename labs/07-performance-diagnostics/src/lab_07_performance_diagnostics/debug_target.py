@@ -21,7 +21,7 @@ def retry_delay(task: TaskRecord, base_seconds: float) -> float:
 
 
 def load_task(record: dict[str, object]) -> TaskRecord:
-    """Translate an untyped storage record at one explicit boundary."""
+    """Convert a storage record's task ID and retry count into a TaskRecord."""
 
     attempts = record["attempts"]
     if not isinstance(attempts, (int, str)):

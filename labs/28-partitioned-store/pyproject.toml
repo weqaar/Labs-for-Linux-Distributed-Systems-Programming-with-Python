@@ -28,9 +28,7 @@ where = ["src"]
 # ---------------------------------------------------------------------------
 # Quality gates.
 #
-# This table says which checks make up "done" for this project. It does not
-# restate anything the tools below already know: sources, line length and test
-# paths are read from their own tables. One fact, one place.
+# Select required gates here; configure their tools in the tables below.
 # ---------------------------------------------------------------------------
 [tool.pybootstrap]
 gates = ["format", "lint", "typecheck", "test"]
@@ -48,14 +46,12 @@ coverage-package = "lab_28_partitioned_store"
 line-length = 100
 target-version = "py310"
 # Tells the import sorter that lab_28_partitioned_store is this project rather than a
-# third-party package. Without it a src layout has first-party imports grouped
-# with the dependencies, and the lint gate reports a sorting error on a file
-# nobody has touched.
+# third-party package, so imports from this source tree form their own group.
 src = ["src", "tests"]
 
 [tool.ruff.lint]
-# E and F are the pyflakes and pycodestyle core, I keeps imports sorted, UP
-# rewrites syntax that a newer Python made obsolete.
+# E checks pycodestyle errors, F checks Pyflakes rules, I checks import order,
+# and UP checks for syntax that can use newer Python features.
 select = ["E", "F", "I", "UP"]
 
 [tool.pyright]
@@ -67,8 +63,6 @@ reportMissingTypeStubs = "none"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-# pythonpath lets the suite run straight after 'git clone', before anyone has
-# installed the project. Without it a src layout gives ModuleNotFoundError on a
-# fresh checkout, which reads as a broken project rather than a missing step.
+# Add local sources to pytest's import path; dependencies still need installation.
 pythonpath = ["src"]
 addopts = "--cov-report=term-missing --import-mode=importlib"

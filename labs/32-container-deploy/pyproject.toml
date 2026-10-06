@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "lab-32-container-deploy"
 version = "0.1.0"
-description = "Relay deployment checkpoint for Linux Distributed Systems Programming with Python."
+description = "Validate relay deployment artifacts and compare dry-run local runtime plans."
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [{ name = "Weqaar Janjua", email = "weqaar.janjua@packetfive.com" }]

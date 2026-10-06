@@ -1,7 +1,9 @@
 # Lab 11 Thread and process workers with NUMA and accelerator-aware placement
 
-This checkpoint gives `relay` two bounded execution paths. Threads lease
-I/O-oriented tasks from a visibility queue and drain on shutdown. Spawned
+This lab gives SigRaft two bounded execution paths. The Python import name
+is `relay`. That name does not mean the program relays traffic. Threads lease
+queued jobs (called tasks in the code) that wait on input or output, then
+finish their current work during shutdown. Spawned
 processes execute CPU-oriented work in separate interpreters, communicate
 through queues, share selected coordination state through a manager, and read
 bulk bytes from shared memory.
@@ -15,16 +17,33 @@ planning peer-to-peer or host-staged transfers and checking a RoCE fabric
 against a site's own congestion-control policy, all against fixture data
 rather than real hardware.
 
-## Set up the checkpoint
+Here, a worker is a thread or process that handles submitted work. A visibility
+lease temporarily hides a queued item while a worker handles it. NUMA means
+non-uniform memory access: different CPUs may reach the same memory at
+different costs. The placement exercises ask which CPUs, memory and devices
+belong near one another; they do not assume that the host has those devices.
+
+## Goal and preparation
+
+Learn which component releases a lease, joins a child process and unlinks a
+shared-memory segment. You will run the supplied worker paths and
+inspect topology fixtures before attempting optional host placement.
+Use Python 3.10 or later in this directory and read
+[`CODING_STANDARDS.md`](../CODING_STANDARDS.md) and `AGENTS.md`.
+Threads, multiprocessing and shared memory are standard-library facilities.
+NUMA bindings are an optional extra in `pyproject.toml`; no accelerator,
+cluster or subscription is required for the gate.
+
+## Set up the lab
 
 ```bash
-python -m venv .venv
+python3 -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev]"
 pybootstrap check
 ```
 
-## Exercise 1: Preserve the visibility lease
+## Exercise 1 Preserve the visibility lease
 
 Start with `worker_pool.py` and `queue.py`. Submit queued `RelayTask` objects,
 cap the number of handlers in flight, and represent SIGTERM by calling
@@ -38,26 +57,29 @@ The pool must:
 4. Leave unacknowledged work available after its visibility timeout.
 5. Join every worker thread within the caller's deadline.
 
-The in-memory queue is a deterministic implementation of the same typed lease
-contract used later by an Azure queue adapter.
+The in-memory queue lets you test leasing and redelivery without Azure.
+It retains acknowledged entries and does not cap queued items, so bounded
+handler concurrency does not mean bounded storage for a long-running service.
 
-## Exercise 2: Send CPU work to spawned processes
+## Exercise 2 Send CPU work to spawned processes
 
-Read `multicore.py`, then run:
+Read `multicore.py`, then save this as `worker_example.py` in the lab and run
+`python worker_example.py`. Do not paste process creation into the REPL:
 
 ```python
 from lab_11_worker_pool import CpuWork, run_process_queue
 
-run = run_process_queue(
-    (
-        CpuWork("task-10", 10),
-        CpuWork("task-11", 11),
-        CpuWork("task-12", 12),
-    ),
-    workers=2,
-)
-print(run.started_worker_pids)
-print(run.results)
+if __name__ == "__main__":
+    run = run_process_queue(
+        (
+            CpuWork("task-10", 10),
+            CpuWork("task-11", 11),
+            CpuWork("task-12", 12),
+        ),
+        workers=2,
+    )
+    print(run.started_worker_pids)
+    print(run.results)
 ```
 
 `CpuWork` and `CpuResult` are frozen, picklable message contracts. The parent
@@ -68,8 +90,10 @@ Inspect the serial `cpu_transform` result and compare it with every child
 result. A result PID must belong to the workers started by the parent and must
 not equal the parent PID.
 
-## Exercise 3: Compare IPC primitives
+## Exercise 3 Compare IPC primitives
 
+Inter-process communication (IPC) carries work between the separate address
+spaces used above. The queue example is one choice, not the only one.
 Modify a local copy of the example to use:
 
 | Primitive | Observation |
@@ -83,7 +107,11 @@ Measure complete elapsed time, serialization time, and payload size. Do not
 use `qsize()` or `empty()` to decide whether processing is complete because
 another process can change the answer immediately.
 
-## Exercise 4: Use a manager for coordination
+## Exercise 4 Use a manager for coordination
+
+Returning independent results needs no shared dictionary. Counting deliveries
+from several workers does, so this exercise introduces a manager process that
+owns that shared state.
 
 Call `count_deliveries_with_manager` with repeated task identifiers. A manager
 server owns the dictionary and lock; child processes hold proxies. The lock
@@ -94,7 +122,7 @@ why two proxy method calls are not one atomic increment. Compare manager
 updates with returning per-worker dictionaries and reducing them in the
 parent.
 
-## Exercise 5: Separate payload from control
+## Exercise 5 Separate payload from control
 
 `sum_shared_bytes` creates one named shared-memory segment, divides it into
 disjoint slices, and sends only the segment name and offsets to workers. Verify
@@ -109,7 +137,7 @@ Shared memory avoids sending the complete payload through every queue. It does
 not supply locks, record validity, byte order, or recovery after a partial
 write.
 
-## Exercise 6: Inspect multicore capacity
+## Exercise 6 Inspect multicore capacity
 
 On Linux, compare:
 
@@ -124,7 +152,7 @@ inside a cpuset-constrained container. Logical CPUs can be simultaneous
 multithreading siblings, so two logical CPUs do not always provide two times
 the CPU throughput.
 
-## Exercise 7: Read NUMA topology
+## Exercise 7 Read NUMA topology
 
 `discover_numa_topology` reads:
 
@@ -137,7 +165,10 @@ the CPU throughput.
 `/proc/PID/numa_maps`. The tests use fixtures so they pass on single-node
 machines.
 
-On an approved multi-node host, compare:
+For an optional comparison on an approved multi-node host, use your own
+benchmark. `YOUR_BENCHMARK` and `PID` below are placeholders for its importable
+benchmark module and running process. They are not commands supplied by this
+lab. Choose permitted NUMA nodes rather than assuming nodes 0 and 1 exist.
 
 ```bash
 numactl --hardware
@@ -147,15 +178,17 @@ numastat -p PID
 ```
 
 Allocate and initialize the payload after applying the placement policy.
-Linux commonly places anonymous pages on the node whose CPU first writes them.
+Linux commonly places anonymous pages on the node of the CPU that first writes them.
 CPU affinity alone does not select the memory node.
 
-## Exercise 8: Balance and bind process workers
+## Exercise 8 Balance and bind process workers
 
 `plan_numa_workers` intersects discovered node CPUs with the process's allowed
 affinity set. It rotates workers across nodes first, then across the CPUs within
 each node. Apply a placement inside a spawned child before allocating its large
-working set:
+working set. The following is an illustrative fragment: choose `cpu_id`,
+`node_id`, `payload_size` and `source` from the permitted host topology and
+your benchmark before running it:
 
 ```python
 from lab_11_worker_pool import (
@@ -187,16 +220,17 @@ and random offsets. Record elapsed time, throughput, affinity,
 `/proc/PID/numa_maps`, `numastat -p PID`, and permitted `perf stat` cache
 counters. Recreate and initialize the buffer after every policy change.
 
-## Exercise 9: Plan accelerator topology without a GPU
+## Exercise 9 Plan accelerator topology without a GPU
 
 `accelerators.py` extends the same sysfs discipline from Exercise 7 to PCI
-devices generally. `PciFunction` is the general record produced by walking
+devices generally. sysfs exposes hardware information as files.
+PCIe connects devices such as graphics processing units (GPUs) and network
+adapters to the host. `PciFunction` is the general record produced by walking
 `/sys/devices`: a bus address, a NUMA affinity hint, a class code and the
 chain of PCIe bridge ancestors above it. `AcceleratorDevice` names that same
-record once its class code has been confirmed to be a GPU or dedicated
-processing accelerator; a network adapter discovered the same way is a
-`PciFunction` with a network-controller class code, never an
-`AcceleratorDevice`, because it was never filtered as one.
+record when returned by accelerator-filtered discovery. It is a naming alias,
+not a separate Python type or a device-class validator. Network discovery
+returns `PciFunction` records with network-controller class codes.
 `discover_accelerator_topology` and `discover_network_topology` are both
 thin, class-filtered wrappers around the general `discover_pci_topology`:
 
@@ -209,16 +243,19 @@ for placement in placements:
     print(placement.device_address, placement.numa_node)
 ```
 
-`plan_accelerator_workers` defaults to a `single-numa-node` policy, the same
-name kubelet's Topology Manager uses: it rejects a request it cannot satisfy
-from one NUMA node's accelerators rather than spreading it across nodes and
-accepting the extra PCIe hop silently. Passing `single_numa_node=False` models
-the more permissive `none` policy.
+`plan_accelerator_workers` defaults to selecting all requested accelerators
+from one recorded NUMA node. If no node has enough devices it raises an error;
+passing `single_numa_node=False` allows selection across nodes. This resembles
+one locality decision in kubelet's Topology Manager, not its complete admission
+algorithm. It neither aligns CPUs and memory nor reserves devices, and it
+groups unknown node values (`-1`) together. Reject unknown locality before
+using a plan that requires a known NUMA node.
 
+The input-output memory management unit (IOMMU) restricts device memory access.
 `discover_iommu_group` reads `/sys/kernel/iommu_groups/*/devices` and returns
-every PCI address that shares one isolation group with the address given,
-which is the set of functions that must be assigned to a virtual machine or
-container together. Group membership is necessary information for planning a
+every PCI address that shares one isolation group with the address given.
+Treat the group as one isolation unit rather than assigning its functions to
+mutually untrusted owners. Group membership is necessary information for planning a
 passthrough, not a certificate that a single-device group is automatically
 safe to hand to an unprivileged workload: that also depends on the guest or
 container's own driver and kernel confinement, and on device firmware the
@@ -227,40 +264,38 @@ IOMMU never inspects.
 `peer_to_peer_feasible` and `plan_transfer` estimate whether a GPU and a
 network adapter share enough PCIe ancestry for a GPUDirect-style peer-to-peer
 DMA path, or whether the safer choice is staging through a host-pinned
-buffer on the network adapter's own NUMA node. Both accept the general
-`PciFunction` type for either argument, since the adjacency estimate is the
-same regardless of device class and a network adapter discovered through
-`discover_network_topology` is never itself an `AcceleratorDevice`. Shared
-ancestry is necessary but not sufficient: a downstream port with PCIe Access
+buffer on the network adapter's recorded NUMA node. Both accept `PciFunction`
+records and compare their ancestor paths; neither initiates DMA or allocates a
+buffer. A shared path does not establish hardware support: a port with PCIe Access
 Control Services (ACS) enabled can still redirect a peer-to-peer transaction
 up to the root complex, which both functions accept as an
 `acs_redirect_enabled` argument.
 
+Remote direct memory access (RDMA) lets a network adapter transfer data without
+the usual application-copy path. RoCE carries RDMA over Ethernet.
 `diagnose_roce_readiness` checks an observed `RoceFabricConfig` against a
 `RoceCongestionPolicy`, the congestion-control design one site has actually
-chosen, rather than against a fixed protocol rule. RoCEv2 itself mandates
-neither priority flow control, nor explicit congestion notification, nor a
-minimum MTU. A site running a DCQCN-style design can require all three; a
-site running a lossy, retransmission-based design such as IRN can supply a
-policy that requires none of the flow-control settings, and the function will
-not report a problem for their absence. `requires_ethernet_congestion_policy`
-reports whether a fabric needs that kind of decision at all: RoCEv2 runs over
-Ethernet, so choosing a congestion policy for it is specifically an Ethernet
-decision, while native InfiniBand's link layer already carries credit-based
-flow control and is not carried over Ethernet, so it needs no equivalent
-Ethernet policy decision. That is narrower than saying InfiniBand needs no
-congestion engineering at all; sizing buffer credits and switch bisection
-bandwidth is still real work an InfiniBand operator has to do.
+chosen, rather than against a fixed protocol rule. Priority flow control (PFC)
+pauses selected Ethernet traffic classes; explicit congestion notification
+(ECN) marks congestion for endpoints. The maximum transmission unit (MTU)
+limits packet size. This model's PFC, ECN and minimum-MTU requirements come
+from site policy. A Data Center Quantized Congestion Notification (DCQCN)
+deployment can require all three; a loss-tolerant design such as Improved
+RoCE NIC (IRN) can supply a policy that requires none of the flow-control
+settings, and the function will not report a problem for their absence.
+`requires_ethernet_congestion_policy` returns true for RoCEv2 because it uses
+Ethernet, and false for native InfiniBand because it does not. InfiniBand still
+needs congestion engineering, including buffer-credit and bandwidth planning.
 
-Every one of these functions reads a fixture directory tree or a plain
-dataclass. The tests build sysfs-shaped fixtures the same way
+Discovery reads sysfs by default; pass a fixture root to inspect test data
+instead of host hardware. The tests build sysfs-shaped fixtures the same way
 `test_numa_topology_is_read_from_sysfs_contract` does, so the normal gate
-proves the parsing and placement logic without a GPU, a PCIe switch, an
-InfiniBand adapter or a RoCE fabric anywhere in the loop.
+checks parsing and placement decisions without a GPU, a PCIe switch, an
+InfiniBand adapter or a RoCE fabric.
 
 ## Completion condition
 
-The checkpoint is complete when thread concurrency remains bounded, visibility
+The lab is complete when thread concurrency remains bounded, visibility
 timeouts redeliver abandoned work, shutdown drains accepted work, spawned
 processes return the same values as serial execution, manager updates retain
 every delivery, shared-memory slices cover the payload once, NUMA topology and
@@ -270,10 +305,11 @@ handle PCI sysfs formats deterministically, peer-to-peer feasibility and RoCE
 readiness checks depend only on the typed inputs given to them, and
 `pybootstrap check` exits zero.
 
-The final `relay` service uses the thread path for blocking adapters and the
-process path for CPU-heavy handlers. Release evidence records bounded queues,
-spawn-safe messages, shared-memory ownership, and NUMA and accelerator-aware placement as
-explicit runtime contracts.
+These independently runnable paths teach execution choices for the SigRaft
+job-management web service; Lab 39 does not start this worker pool. Keep the
+test results that show process-queue limits, picklable messages, shared-memory
+cleanup and placement decisions separate from measurements on real hardware.
+
 ## Python REPL debugging session
 
 Inspect message contracts before starting child processes:
@@ -286,8 +322,18 @@ Inspect message contracts before starting child processes:
 >>> public
 >>> inspect.getmembers(lab, inspect.isclass)
 >>> help(lab)
+>>> work = lab.CpuWork("task-17", 17)
+>>> type(work), repr(work)
+>>> inspect.signature(lab.run_process_queue)
 ```
 
 Construct one picklable work item, inspect its type and representation, and
 inspect the process-runner signature. Start processes only from a script guarded
 by `if __name__ == "__main__":`.
+
+Run `pytest -q tests/test_lab_11_worker_pool.py` for the lab behaviors.
+`pybootstrap check` must exit 0; exit 1 means findings and exit 2 means a gate
+could not run. Confirm children are joined and shared-memory names unlinked,
+then remove `worker_example.py` if no longer needed. Do not leave probes or
+placement changes running on a shared host. Fixture topology checks model decisions,
+not accelerator DMA, throughput or device isolation.

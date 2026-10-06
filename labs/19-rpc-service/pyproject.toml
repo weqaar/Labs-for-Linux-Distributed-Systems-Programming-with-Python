@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "lab-19-rpc-service"
 version = "0.1.0"
-description = "Lab for the corresponding chapter of Linux Distributed Systems Programming with Python."
+description = "Test RPC retries and deadlines, and serve relay tasks through FastAPI and Uvicorn."
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [{ name = "Weqaar Janjua", email = "weqaar.janjua@packetfive.com" }]
@@ -15,9 +15,8 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# uvloop is an optional event loop, not a correctness requirement: the server
-# entry point falls back to asyncio's default loop when it is absent, and it
-# has no Windows wheels.
+# The server uses asyncio unless uvloop is explicitly requested. A requested
+# but unavailable uvloop raises an error; this extra has no Windows wheels.
 uvloop = ["uvloop>=0.19,<1; sys_platform != 'win32'"]
 dev = [
   "pybootstrap[gates] @ git+https://github.com/packetfive/pybootstrap.git@32a0e5c64a3a2fe3269a051ec39700a9b9a25a55",

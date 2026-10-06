@@ -1,7 +1,7 @@
-Prove an honest verdict
-=======================
+Inspect a failed verdict
+========================
 
-Use a fake at the process boundary, not a mock of the function being tested.
+Supply a fake command runner while calling the real ``run_gate`` function.
 This example does not run external quality tools or need a cloud account.
 
 .. testsetup::

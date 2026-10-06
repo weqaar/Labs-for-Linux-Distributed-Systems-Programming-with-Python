@@ -24,7 +24,7 @@ makes warnings fail the command, and ``--keep-going`` collects more diagnostics
 without turning the result into success.
 
 The built-in classic theme needs no theme package or remote inventory.
-``_templates/layout.html`` extends ``!layout.html`` to add checkpoint guidance
+``_templates/layout.html`` extends ``!layout.html`` to add lab guidance
 after the original footer. The exclamation mark selects the theme's original
 template instead of recursively extending this override. Keep the change small
 and review the rendered footer after a Sphinx upgrade.
@@ -51,9 +51,9 @@ contact the network too. The same applies to reading credentials, parsing CLI
 arguments and starting worker threads. Put resource creation behind an explicit
 call and a typed adapter; keep command startup under a main guard.
 
-The documentation tests create an isolated module whose import raises
-``RuntimeError`` and ask autodoc to import it. A strict build must fail. This
-safe substitute demonstrates the import boundary without making a real network
+The documentation tests create an isolated module. Importing that module raises
+``RuntimeError``. The tests then ask autodoc to import it. A strict build must fail. This
+safe substitute checks how Sphinx handles import errors without making a real network
 request. Mocking every failed import would hide this architectural mistake.
 
 Compare with MkDocs

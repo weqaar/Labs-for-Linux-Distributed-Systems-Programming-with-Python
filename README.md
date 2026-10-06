@@ -3,13 +3,17 @@
 The public labs for the book *Linux Distributed Systems Programming with
 Python* by Weqaar Janjua.
 
-The labs are independently runnable stages of a Python web service for job
-management and resource-aware scheduling. Early stages call it `relay`,
-operated through the `relayctl` CLI. Each lab teaches
-one topic and advances the same product contract. Together they build toward
-the runnable SigRaft REST and GraphQL service, resource-aware scheduling,
-operational analysis, Azure and reader-managed cloud deployment, release
-evidence and rollback in Lab 39.
+These labs build SigRaft, a Python web service for job management and
+resource-aware scheduling. A job has an identifier, an action, and a status
+of queued, running, succeeded, or failed. Labs 1 through 38 import their
+Python package as `relay` and use the command `relayctl`. Those are source
+names. The program does not relay network traffic. Lab 39 uses `sigraftctl`.
+Each lab covers one topic and keeps the same job contract. Together they
+build the runnable SigRaft service. REST here means request and response
+over HTTP. GraphQL is a query language for reading and changing data over
+one endpoint. Lab 39 also covers resource-aware scheduling, operational
+analysis, Azure and reader-managed cloud deployment, release evidence and
+rollback.
 
 The book source is not part of this repository.
 
@@ -19,8 +23,8 @@ The book source is not part of this repository.
 an optional authenticated WebSocket listener. Use `--transport websocket` for
 commands and `status <job-id> --watch` for a current snapshot followed by state
 changes. The lab documents private-token setup and separate listener ports.
-These notifications do not execute submitted work or retrieve output files;
-the compact service still keeps its job records in memory.
+These notifications do not execute submitted work or retrieve output files.
+The compact service still keeps each job in memory.
 
 [Lab 2](labs/02-package-build/README.md) introduces Sphinx API documentation,
 theme templates, executable examples and a runnable MkDocs comparison.

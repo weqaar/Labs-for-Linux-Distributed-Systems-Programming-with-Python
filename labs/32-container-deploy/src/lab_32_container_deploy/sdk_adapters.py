@@ -1,4 +1,4 @@
-"""Typed Docker and Kubernetes SDK boundaries for deploying relay."""
+"""Deploy relay through injected Docker and Kubernetes SDK clients."""
 
 from __future__ import annotations
 
@@ -114,7 +114,7 @@ def run_relay_smoke_check(
     *,
     timeout_seconds: int = 30,
 ) -> SmokeResult:
-    """Run relayctl from an immutable image, collect evidence, then clean up."""
+    """Run relayctl from a digest-pinned image, return its exit status and logs, and clean up."""
 
     _require_digest(image)
     container = client.containers.run(

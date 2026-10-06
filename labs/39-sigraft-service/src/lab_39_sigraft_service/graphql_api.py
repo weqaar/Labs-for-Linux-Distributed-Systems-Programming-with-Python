@@ -1,4 +1,4 @@
-"""GraphQL boundary over the same SigRaft task service used by REST."""
+"""GraphQL operations over the same SigRaft job-management methods used by REST."""
 
 from __future__ import annotations
 

@@ -3,9 +3,8 @@
 An ``async def`` route runs directly on the worker's event loop. A call that
 blocks the thread instead of awaiting, such as ``time.sleep`` or a synchronous
 socket read, stalls every other coroutine scheduled on that loop, not only the
-request that made the call. The two functions below give tests something
-concrete to assert on: one blocks the loop, the other offloads the same work
-to a thread and lets the loop keep scheduling.
+request that made the call. Compare the heartbeat tick count while running
+blocking_write and offloaded_write to observe the effect.
 """
 
 from __future__ import annotations
@@ -42,8 +41,8 @@ async def offloaded_write(duration_s: float) -> None:
 class Heartbeat:
     """A tick counter driven by a background coroutine on the same loop.
 
-    A heartbeat that keeps advancing proves the event loop kept scheduling
-    other work while a handler ran; one that stalls proves it did not.
+    Compare tick counts before and after a handler to see whether this
+    coroutine received execution time while the handler ran.
     """
 
     def __init__(self, *, interval_s: float) -> None:

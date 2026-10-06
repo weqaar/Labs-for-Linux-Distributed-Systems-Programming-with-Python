@@ -1,12 +1,40 @@
-# Lab 31 Airflow Dags
+# Lab 31 Airflow directed acyclic graphs
 
-Checkpoint 31 of the relay product. This lab keeps the relay DAG from Lab 30
-but describes it in a form that imports fast and does not require Airflow to be
-installed.
+This lab describes SigRaft's workflow from Lab 30 as data an Airflow adapter
+could use. Its Python import name is `relay`; the program does not relay
+traffic. Importing the blueprint does not require Airflow.
+
+## Goal and activities
+
+Describe scheduling intent separately from runtime orchestration. You will
+inspect a supplied serializable blueprint, calculate logical run dates and
+test resource declarations. This lab does not construct Airflow graph objects,
+run a scheduler, execute sensors or import the named runtime callables.
+
+Use Python 3.10 or later in this directory and read
+[`CODING_STANDARDS.md`](../CODING_STANDARDS.md) and `AGENTS.md`.
+Dataclasses and UTC datetime arithmetic come from the standard library.
+Airflow is not a declared dependency. Keep dependencies in `pyproject.toml`
+if you later implement a separately scoped integration.
+
+A blueprint records what an Airflow adapter would need to create. Backfill
+means requesting past scheduled runs; its cap prevents one request from
+creating an unbounded backlog. A sensor waits for a prerequisite, such as a
+partition snapshot. Marking it deferrable asks a future runtime to release its
+worker slot while it waits.
+
+1. Install and inspect the blueprint in the REPL.
+2. Run `pytest -q tests/test_lab_31_airflow_dags.py` and compare the 02:00 UTC
+   schedule with the seven-run backfill cap.
+3. Inspect `wait-for-partition-snapshot`, the extra sensor preceding Lab 30's
+   workflow. Explain why a deferred sensor need not occupy a worker slot.
+4. Change a resource or retry declaration in a test and inspect serialized
+   output. Treat `callable_name` strings as proposed adapter targets, not
+   runnable functions: the referenced `runtime` module is not supplied.
 
 ## Relay DAG
 
-The task ids stay aligned with the engine checkpoint:
+The task ids stay aligned with the engine lab:
 
 - `discover-pending-tasks`
 - `hydrate-task-context`
@@ -14,12 +42,12 @@ The task ids stay aligned with the engine checkpoint:
 - `persist-task-status`
 - `publish-run-metrics`
 
-This checkpoint adds:
+This lab adds:
 
 - a UTC daily schedule
 - catchup and bounded backfill rules
-- a deferrable upstream sensor
-- worker-pool resource semantics
+- a declaration for a deferrable upstream sensor
+- worker-pool resource declarations
 - a serialisable Airflow blueprint adapter
 
 The module-level DAG build performs no network access and constructs no client.
@@ -27,7 +55,7 @@ The module-level DAG build performs no network access and constructs no client.
 ## Getting started
 
 ```bash
-python -m venv .venv && source .venv/bin/activate
+python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 ```
 
@@ -48,7 +76,23 @@ Inspect the import-safe blueprint before requiring Airflow:
 >>> public
 >>> inspect.getmembers(lab, inspect.isclass)
 >>> help(lab)
+>>> blueprint = lab.RELAY_DAG.as_airflow_blueprint()
+>>> blueprint["schedule"], len(blueprint["tasks"])
+('0 2 * * *', 6)
+>>> lab.RELAY_DAG.task("wait-for-partition-snapshot").deferrable
+True
 ```
 
-Inspect task IDs, dependencies, schedule fields, and callable signatures on the
-blueprint before translating them into Airflow objects.
+The cron expression means 02:00 every day; this blueprint uses UTC. Its six
+tasks consist of the five workflow steps and the extra snapshot sensor.
+`True` records a deferral request, not evidence that a sensor has run.
+Inspect dependencies and callable names before attempting an Airflow adapter.
+
+## Contribution and completion
+
+This blueprint describes a proposed daily workflow for the SigRaft
+job-orchestration web service, not an Airflow dependency imported by Lab 39.
+Finish when you can explain UTC logical dates, bounded backfill and the missing
+runtime adapter, with `pybootstrap check` exit 0. Exit 1 means findings;
+exit 2 means a gate could not run. No subscription, scheduler process or
+database is needed. Exit the REPL to discard blueprint objects.

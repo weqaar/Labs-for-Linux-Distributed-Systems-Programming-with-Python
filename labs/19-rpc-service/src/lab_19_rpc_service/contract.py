@@ -10,9 +10,7 @@ from typing import Any
 
 TASKS_COLLECTION_PATH = "/tasks"
 
-#: Upper bounds on the sizes this module accepts. A malformed request should
-#: fail fast on shape, not after the interpreter has spent time or memory
-#: parsing an attacker-sized string.
+#: Check string lengths before parsing timestamps or retaining task values.
 MAX_TASK_ID_LENGTH = 64
 MAX_TARGET_LENGTH = 512
 MAX_TIMESTAMP_LENGTH = 64

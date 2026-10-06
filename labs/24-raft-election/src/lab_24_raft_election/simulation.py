@@ -27,7 +27,7 @@ class LogPosition:
 
 @dataclass
 class PersistentVoteState:
-    """Durable state that survives a node restart."""
+    """Vote state retained across simulated restarts, not written to disk."""
 
     current_term: int = 0
     voted_for: NodeId | None = None

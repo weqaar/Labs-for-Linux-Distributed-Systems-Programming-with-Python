@@ -203,7 +203,7 @@ class QueueServiceClientProtocol(Protocol):
 
 
 class BlobServiceFactory(Protocol):
-    """Factory boundary for building blob service clients."""
+    """Callable that builds a blob service client from credentials and retry settings."""
 
     def __call__(
         self,
@@ -217,7 +217,7 @@ class BlobServiceFactory(Protocol):
 
 
 class QueueServiceFactory(Protocol):
-    """Factory boundary for building queue service clients."""
+    """Callable that builds a queue service client from credentials and retry settings."""
 
     def __call__(
         self,
@@ -231,7 +231,7 @@ class QueueServiceFactory(Protocol):
 
 
 class RelayTaskStore(Protocol):
-    """Typed boundary used by relay code that persists task documents."""
+    """Storage operations for persisting and retrieving relay task documents."""
 
     def ensure_container(self) -> bool:
         """Create the container once and treat existing state as success."""
@@ -251,7 +251,7 @@ class RelayTaskStore(Protocol):
 
 
 class RelayTaskQueue(Protocol):
-    """Typed boundary used by relay code that dispatches work."""
+    """Queue operations for notifying workers of relay tasks."""
 
     def ensure_queue(self) -> bool:
         """Create the queue once and treat existing state as success."""
@@ -433,7 +433,7 @@ class AzureQueueTaskDispatcher:
 
 @dataclass(frozen=True)
 class BlobItemAdapter:
-    """Expose just the blob name through the relay protocol boundary."""
+    """Expose the blob name without returning an SDK-specific list item."""
 
     name: str
 
@@ -460,7 +460,7 @@ class BlobPagerAdapter:
 
 @dataclass(frozen=True)
 class BlobContainerClientAdapter:
-    """Adapt the Azure SDK container client to the relay protocol boundary."""
+    """Implement relay's blob operations with an Azure SDK container client."""
 
     client: ContainerClient
 
@@ -479,7 +479,7 @@ class BlobContainerClientAdapter:
 
 @dataclass(frozen=True)
 class QueueClientAdapter:
-    """Adapt the Azure SDK queue client to the relay protocol boundary."""
+    """Implement relay's queue operations with an Azure SDK queue client."""
 
     client: QueueClient
 
@@ -492,7 +492,7 @@ class QueueClientAdapter:
 
 @dataclass(frozen=True)
 class BlobServiceClientAdapter:
-    """Adapt the Azure SDK blob service client to the relay protocol boundary."""
+    """Return relay container adapters from an Azure SDK blob service client."""
 
     client: BlobServiceClient
 
@@ -502,7 +502,7 @@ class BlobServiceClientAdapter:
 
 @dataclass(frozen=True)
 class QueueServiceClientAdapter:
-    """Adapt the Azure SDK queue service client to the relay protocol boundary."""
+    """Return relay queue adapters from an Azure SDK queue service client."""
 
     client: QueueServiceClient
 

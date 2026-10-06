@@ -1,4 +1,4 @@
-"""Tests prove that planning is safe, deterministic, and strict."""
+"""Check deterministic plans, invalid configurations and guarded execution."""
 
 from __future__ import annotations
 

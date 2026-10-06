@@ -1,4 +1,4 @@
-"""Offline contracts for the relay Bicep deployment."""
+"""Check selected Bicep declarations and prepare Azure CLI command arguments."""
 
 from __future__ import annotations
 
@@ -51,7 +51,7 @@ def load_bicep_checkpoint(root: Path) -> BicepCheckpoint:
 
 
 def validate_bicep_checkpoint(checkpoint: BicepCheckpoint) -> None:
-    """Require modules, identities, RBAC, AKS, and environment separation."""
+    """Check required source markers and environment parameters without compiling Bicep."""
 
     combined = "\n".join((checkpoint.main, checkpoint.platform_module, checkpoint.storage_module))
     required = (

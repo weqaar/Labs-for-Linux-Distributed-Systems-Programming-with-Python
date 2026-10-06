@@ -1,4 +1,4 @@
-"""Relay application service composed from typed object boundaries."""
+"""Submit and run relay tasks using injected repositories and action handlers."""
 
 from __future__ import annotations
 

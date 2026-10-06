@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "lab-34-instrumented-service"
 version = "0.1.0"
-description = "Relay observability checkpoint for Linux Distributed Systems Programming with Python."
+description = "Inspect relay traces, metrics and correlated logs with OpenTelemetry."
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [{ name = "Weqaar Janjua", email = "weqaar.janjua@packetfive.com" }]

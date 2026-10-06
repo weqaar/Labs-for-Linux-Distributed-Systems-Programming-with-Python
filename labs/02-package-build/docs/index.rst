@@ -2,8 +2,10 @@ Relay package build
 ===================
 
 A command with a familiar filename can still contain the wrong executable.
-This checkpoint packages ``relayctl`` and inspects the bytes before release.
-The same resource and task-state contracts later become part of SigRaft.
+This lab packages ``relayctl`` and inspects the bytes before release.
+Here ``relayctl`` inspects executables; it does not contact SigRaft or submit
+jobs. The Copier template separately generates the ``/tasks`` job fields
+used in later labs.
 
 .. toctree::
    :maxdepth: 2

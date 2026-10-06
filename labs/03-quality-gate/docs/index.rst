@@ -1,9 +1,11 @@
-Relay quality evidence
-======================
+Quality evidence
+================
 
-A clean-looking pipeline can mean its checker never ran. This checkpoint
-preserves pass, fail and error evidence for the relay task service and the
-eventual SigRaft release.
+A clean-looking pipeline can mean its checker never ran. This lab
+records passed checks, findings and checker errors. The Python import name
+is ``relay``. That name does not mean the program relays traffic. The same
+evidence later supports a SigRaft release. SigRaft is the job-management
+web service these labs build.
 
 .. toctree::
    :maxdepth: 2

@@ -1,9 +1,12 @@
 # Lab 19 Rpc Service
 
-This checkpoint turns the relay `/tasks` contract into a small HTTP RPC layer,
-and adds a real FastAPI application that serves the same contract over ASGI.
-The fake service and client stay in memory for tests, but they keep the
-failure modes that matter:
+This lab submits and reads tasks through HTTP. A remote procedure call
+(RPC) asks another component to perform an operation and return a result.
+The lab provides both a fake transport for controlled failures and a FastAPI
+application. FastAPI uses ASGI, the interface between an asynchronous Python
+application and a server such as Uvicorn.
+
+The fake path makes these request behaviors observable:
 
 - request correlation with `x-correlation-id`
 - deadlines sent as remaining budget in `x-relay-budget-ms`
@@ -12,7 +15,7 @@ failure modes that matter:
 - a fake transport that can drop, delay and duplicate calls
 
 The FastAPI application in `api.py` exposes the same `/tasks` resource, task
-IDs and states over a real ASGI boundary:
+IDs and states through ASGI:
 
 - `TaskSubmissionBody` validates request shape and types with Pydantic; the
   domain rules from `TaskSubmission`, such as the `task-<positive integer>`
@@ -24,10 +27,34 @@ IDs and states over a real ASGI boundary:
 - every route is `async def`; none of them do blocking work, so none of them
   need `asyncio.to_thread`
 
+## Goal and working order
+
+Make a remote submission distinguish transport success, domain acceptance and
+an unknown outcome after a lost reply. You will inspect the supplied fake RPC
+path and real ASGI application, inject failures and optionally start Uvicorn.
+Accepted jobs remain in memory; this lab does not execute their actions.
+
+Use Python 3.10 or later here and read
+[`CODING_STANDARDS.md`](../CODING_STANDARDS.md) and `AGENTS.md`.
+FastAPI routes requests, Pydantic validates input and Uvicorn serves the app.
+The default loop is asyncio. HTTPX/TestClient and gate tools are development dependencies,
+all declared in `pyproject.toml`. No Azure subscription or remote service is
+needed. The fake clock tests do not measure production latency.
+
+1. Install below and perform the in-process request in the REPL.
+2. Run `pytest -q tests/test_lab_19_rpc_service.py tests/test_api.py`.
+   Trace a dropped reply through the replay cache and compare a duplicate
+   body with a conflicting body under the same key.
+3. Run `pytest -q tests/test_concurrency.py tests/test_server.py`.
+   Compare offloaded blocking work with blocking the event loop.
+4. Optionally run `RELAY_HOST=127.0.0.1 RELAY_PORT=8080 RELAY_WORKERS=1 python -m lab_19_rpc_service.server`.
+   Use the same request headers as the REPL and stop the foreground server
+   with Ctrl-C. Several workers would have several independent stores.
+
 ## Getting started
 
 ```bash
-python -m venv .venv && source .venv/bin/activate
+python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 ```
 
@@ -52,10 +79,18 @@ pyright src tests
 pytest
 ```
 
-## Notes
+## Follow a request through the implementation
 
-- `TaskSubmission` and `TaskStatus` keep the same `/tasks` contract as Lab 16.
-- `RelayRpcClient` enforces the deadline at the caller, not only at the server.
+Begin with the request models, then follow the service call and transport.
+The components below keep input validation, retry decisions and process
+configuration in separate places.
+
+- `TaskSubmission` and `TaskStatus` use the task fields developed in
+  Lab 18; Lab 16's framing is a separate byte-transport exercise.
+- `RelayRpcClient` and the fake RPC service enforce the modeled deadline.
+  The FastAPI routes validate and record `x-relay-budget-ms`, but do not
+  measure elapsed time or enforce an end-to-end deadline. Carrying a budget
+  header is not the same as enforcing it.
 - `RelayHttpService` replays the cached answer when a retry carries the same
   idempotency key and the same request body.
 - `create_app()` builds an ASGI application exercised in tests with
@@ -66,36 +101,34 @@ pytest
   `blocking_write` stalls a `Heartbeat` running on the same event loop, and
   `offloaded_write` does the same work on a thread without stalling it.
 - `server.py` reads `RELAY_HOST`, `RELAY_PORT`, `RELAY_WORKERS` and
-  `RELAY_USE_UVLOOP` from the environment. It resolves the event loop name
-  through Uvicorn's own `loop=` setting rather than calling
-  `uvloop.install()` itself: leaving `RELAY_USE_UVLOOP` unset runs on
-  asyncio, and asking for uvloop when it is not installed raises
-  `UvloopUnavailableError` instead of quietly falling back. Every worker,
-  one or many, is started from the same `lab_19_rpc_service.api:app_factory`
-  import string with Uvicorn's `factory=True`, which is the one target valid
-  whether Uvicorn starts a single process or several; each worker process
-  Uvicorn starts calls the factory itself and gets its own `RelayTaskState`,
-  so scaling past one worker needs an external store for tasks and the
-  replay cache, not more copies of this in-memory one.
-- `ServerConfig` bounds its own inputs: the port must be between 1 and
-  65535, the host must not be empty, the worker count must be positive and
-  at most `MAX_WORKERS`, so an environment typo cannot spawn an unbounded
-  number of processes, and the import string must not be empty either.
-  `RELAY_USE_UVLOOP` is parsed against a fixed set of true and false
-  spellings; a value outside that set, a typo, raises rather than silently
-  parsing as false.
-- `api.py` bounds the correlation ID, idempotency key and remaining-budget
-  headers, and the task ID, target and timestamp fields, so an oversized or
-  malformed request is rejected with a 400 or 422 rather than an unbounded
-  allocation or a 500. A blank, all-whitespace, correlation ID or
-  idempotency key is rejected the same way a missing one is, rather than
-  being stored as a usable identifier. The timestamp bound runs as a
-  Pydantic "before" validator on the raw string, since Pydantic's `datetime`
-  field parses that string directly and would otherwise never see the
-  shared contract's length limit.
+  `RELAY_USE_UVLOOP` from the environment. It selects Uvicorn's `loop=`
+  setting: asyncio by default, or uvloop when explicitly requested.
+  Requesting an unavailable uvloop raises `UvloopUnavailableError`.
+  With `factory=True`, each worker calls
+  `lab_19_rpc_service.api:app_factory` and gets its own `RelayTaskState`.
+  Multiple workers therefore need shared storage for both tasks and replayed
+  replies; their in-memory dictionaries are independent.
+- `ServerConfig` requires a port between 1 and 65535, a nonblank host and
+  import string, and between one and `MAX_WORKERS` processes. The worker cap
+  prevents a mistyped count from starting arbitrarily many processes.
+  `RELAY_USE_UVLOOP` accepts only its documented Boolean spellings; a typo
+  raises an error rather than silently selecting asyncio.
+- `api.py` limits correlation IDs, idempotency keys, remaining-budget headers,
+  task IDs, targets and timestamp strings. The tested violations produce
+  400 or 422 responses. Blank correlation IDs and idempotency keys are rejected;
+  omitting an idempotency key is allowed. A Pydantic "before" validator checks
+  timestamp length because conversion to `datetime` loses the raw string length.
+
+These field checks do not limit the entire HTTP body, stored task count or
+replay-cache size. A submission without a matching replay entry overwrites an
+existing task with the same ID. The budget parser also accepts `"00"` as zero
+and uses `isdigit()`, which admits some characters that `int()` cannot parse.
+Treat these as limits of the supplied example, not production validation
+guarantees.
+
 ## Python REPL debugging session
 
-After the editable install, inspect the RPC boundary:
+After the editable install, submit a request to the in-process ASGI application:
 
 ```pycon
 >>> import inspect
@@ -105,7 +138,30 @@ After the editable install, inspect the RPC boundary:
 >>> public
 >>> inspect.getmembers(lab, inspect.isclass)
 >>> help(lab)
+>>> from fastapi.testclient import TestClient
+>>> app = lab.create_app()
+>>> with TestClient(app) as client:
+...     response = client.post(
+...         "/tasks",
+...         headers={"x-correlation-id": "corr-17", "x-relay-budget-ms": "100"},
+...         json={"id": "task-17", "action": "index", "target": "documents",
+...               "submitted_at": "2026-08-18T05:52:44Z"},
+...     )
+>>> response.status_code, response.json()["state"]
+(202, 'queued')
 ```
 
-Inspect request, reply, deadline, and adapter signatures before simulating a
-lost response. Keep invocation separate from import-time inspection.
+The 202 response means the request was accepted; `queued` says the action has
+not run. TestClient exercised the application without opening a socket.
+Now compare this successful request with the dropped-reply test, where the
+client must decide whether repeating the request is safe.
+
+## Contribution and completion
+
+This teaches HTTP, ASGI, deadlines and idempotency for the SigRaft
+job-management web service. Lab 39 retains this lab's test results but uses
+its own HTTP server, not this FastAPI application.
+Finish when duplicate handling, deadline exhaustion and invalid request
+behavior are demonstrated, and `pybootstrap check` exits 0. Exit 1 means
+findings; exit 2 means a gate could not run. Close TestClient, stop any live
+server, and deactivate the environment. In-memory tasks are not durable.

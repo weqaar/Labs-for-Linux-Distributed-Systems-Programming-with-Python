@@ -1,7 +1,9 @@
 # Lab 15 Engineering the CPython bytecode machine
 
-This checkpoint gives `relay` a typed task-query language and a source-built
-CPython operation for formatting task identifiers. It separates two jobs that
+This lab gives SigRaft a typed query language for jobs and a source-built
+CPython operation that formats job identifiers. The Python import name is
+`relay`. That name does not mean the program relays traffic. The code writes
+those identifiers as `task-17`. The lab separates two pieces of work that
 are often confused: PyParsing turns operator input into a typed expression
 tree, while the modified interpreter executes a new `RELAY_TASK_ID`
 instruction.
@@ -9,18 +11,32 @@ instruction.
 The normal lab gate is local and deterministic. Building CPython is a separate,
 deliberate exercise because it needs a compiler toolchain and more time.
 
-## Exercise 1: Parse a relay query
+## Goal and technologies
+
+Compare two ways to extend a program: parsing a small language without
+executing its input, and changing the interpreter that executes Python.
+You start from provided parser code and a pinned patch, inspect both, then
+extend tests and optionally reproduce the interpreter build.
+Use Python 3.10 or later in this directory and read
+[`CODING_STANDARDS.md`](../CODING_STANDARDS.md) and `AGENTS.md`.
+PyParsing is the runtime dependency; build and gate dependencies belong in
+`pyproject.toml`. The optional CPython exercise also needs Git, make, a C
+toolchain and CPython's platform build prerequisites. It may download public
+source, but the default gate requires no network or Azure subscription.
+
+## Exercise 1 Parse a relay query
 
 Create the environment and run the gate:
 
 ```bash
-python -m venv .venv
+python3 -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev]"
 pybootstrap check
 ```
 
-Read `query.py`, then try queries such as:
+The query language selects tasks by their fields. It is not Python input.
+Read `query.py`, then pass expressions such as these to `parse_query`:
 
 ```text
 state = queued or priority >= 7 and action contains "index"
@@ -36,7 +52,12 @@ Add one parser test that proves `and` binds more tightly than `or`, and another
 that proves parentheses change the result. Do not use `eval`; the typed tree is
 the security boundary between operator text and task selection.
 
-## Exercise 2: Inspect the pinned source patch
+## Exercise 2 Inspect the pinned source patch
+
+The parser above extends what the application can understand without changing
+Python. This second experiment changes Python itself: a new instruction
+formats a task identifier. Neither experiment depends on the other; comparing
+them shows which layer must change for each kind of extension.
 
 The exercise uses CPython 3.14.7, tag `v3.14.7`, at commit
 `823f0323ee6ec1402088b73bce1a38473cac36dc`. The exact source and generated
@@ -59,7 +80,7 @@ recognition in `Python/codegen.c`, through the instruction definition in
 `Python/bltinmodule.c`. Generated headers are outputs, not places to design the
 instruction.
 
-## Exercise 3: Generate and build
+## Exercise 3 Generate and build
 
 From the patched CPython checkout:
 
@@ -74,7 +95,7 @@ The checked-in patch includes generated files so its changes can be reviewed,
 but regeneration must reproduce them. The custom magic number is 3628 because
 adding an opcode changes the bytecode format.
 
-## Exercise 4: Prove both execution paths
+## Exercise 4 Test both execution paths
 
 Run the custom and affected upstream tests:
 
@@ -102,7 +123,7 @@ The disassembly must contain `RELAY_TASK_ID`, not `CALL`, and the output must
 be `task-17`. An alias such as `factory = builtins.relay_task_id` follows the
 ordinary builtin call path and therefore contains `CALL`.
 
-## Exercise 5: Test the semantic boundary
+## Exercise 5 Test direct calls and ordinary calls
 
 The compiler treats a direct bare-name call to `relay_task_id` as an intrinsic.
 Local shadowing does not replace that direct operation. Keyword calls, starred
@@ -115,7 +136,7 @@ negative integers, strings, and booleans, while preserving arbitrary-precision
 integers. The nested-expression test verifies that consuming one stack value
 and producing one result does not damage adjacent values.
 
-## Architecture checkpoint
+## Build on another processor
 
 Build the same patch on another supported processor when one is available.
 `RELAY_TASK_ID` remains CPython bytecode, while the C compiler emits different
@@ -144,8 +165,32 @@ Inspect the parser and ordinary interpreter before building custom CPython:
 >>> public
 >>> inspect.getmembers(lab, inspect.isclass)
 >>> help(lab)
+>>> expression = lab.parse_query("state = queued")
+>>> type(expression).__name__
+'Predicate'
+>>> inspect.signature(lab.parse_query)
 ```
 
-Parse one query, inspect the frozen expression-node types, and disassemble the
-ordinary callable path. Repeat under the patched interpreter and compare the
-direct custom instruction.
+`Predicate` is one parsed comparison, not executed Python code. Inspect its
+fields before evaluating it against a task. Disassembly belongs to the separate
+interpreter exercise after the patched build is available.
+
+The ordinary interpreter has no `relay_task_id` builtin. Only perform the
+custom disassembly after the patched build succeeds. The opcode accepts zero;
+that arithmetic contract is broader than later positive-number task-ID
+validation and must not be mistaken for an API admission rule.
+
+## Contribution and completion
+
+This independent lab shows how to parse job queries and test an interpreter
+change while preserving task-ID formatting. These are extension techniques for
+the SigRaft job-management web service. Lab 39 neither imports this parser nor
+requires the patched interpreter. Run
+`pytest -q tests/test_lab_15_cpython_bytecode.py`, then require
+`pybootstrap check` exit 0. Exit 1 means findings; exit 2 means a gate could
+not run. A green default gate checks required text in the patch and the pinned
+build plan, not whether the patched interpreter builds or runs.
+
+For the optional build, retain the source revision and upstream/custom test
+results separately. Remove the owned `cpython-relay` checkout and build outputs
+when no longer needed; never replace the system interpreter.

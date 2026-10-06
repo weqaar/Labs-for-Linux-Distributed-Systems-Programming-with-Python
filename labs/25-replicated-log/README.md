@@ -1,18 +1,40 @@
 # Lab 25 Replicated Log
 
-Deterministic replicated-log checkpoint for the relay task service.
+## Goal and activities
+
+Distinguish an appended command from one committed by a majority and applied
+to a state machine. The reference implementation extends election in a
+deterministic Python simulation, not a running durable cluster.
+Use Python 3.10 or later here and read
+[`CODING_STANDARDS.md`](../CODING_STANDARDS.md) and `AGENTS.md`.
+The standard library supplies the simulation; dependencies are declared in
+`pyproject.toml`. No external network or Azure subscription is needed.
+
+The log records commands in order. Committing marks which commands are agreed
+for use; applying runs those commands against the job status. The code
+calls that status the task state. The state
+machine is the code that performs those ordered state changes. Keeping these
+steps separate prevents an isolated leader's private entry from changing
+visible task state.
+
+1. Install, elect a simulated leader and enqueue one command in the REPL.
+2. Run `pytest -q tests/test_lab_25_replicated_log.py` and inspect log index,
+   commit index and state-machine history after enqueue, start and completion.
+3. Crash a follower in the simulation, submit commands, restart it and catch
+   up. Compare its log and applied snapshot with the leader's.
+4. Partition the leader away from a majority and inspect the uncommitted
+   entry. Heal after a replacement election and verify it is not applied.
 
 ## Getting started
 
 ```bash
-python -m venv .venv && source .venv/bin/activate
+python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 ```
 
 ## Quality gates
 
-The same command runs on a laptop and in CI, so a failure is always
-reproducible:
+Run the configured checks before considering the lab complete:
 
 ```bash
 pybootstrap check
@@ -37,29 +59,30 @@ pytest
 |---|---|
 | 0 | Every gate passed |
 | 1 | A gate ran and found problems |
-| 2 | A gate could not run, so nothing was checked |
+| 2 | A gate could not run and supplied no verdict |
 
-The split between 1 and 2 is the point. A missing or misconfigured tool is not
-the same as clean code, and a pipeline that treats them alike will eventually
-report success while checking nothing.
+Fix findings reported by exit 1. For exit 2, repair the tool or its
+configuration and rerun it; an unavailable check cannot establish a pass.
 
 The dev extra installs the public pybootstrap project and its gate tools from
 GitHub, so a fresh clone receives the same quality runner used by every lab.
 
 ## Simulation focus
 
-The package extends election into a replicated relay task log and deterministic
+The package extends election into a replicated job log and deterministic
 state machine. Tests cover:
 
 - majority-only commit
 - ordered application of committed commands
 - follower catch-up after missing the whole write sequence
-- restart from persisted log state
+- restart from retained in-memory log state
 - an isolated leader's uncommitted entry never becoming visible
 
-For a production deployment I would still store the durable log in a managed
-service rather than operate raw disks on app instances. The point here is the
-commit boundary, not the storage product.
+`PersistentNodeState` is a Python object retained by the simulation. There is
+no disk persistence, real network replication or crash-recovery storage test.
+The state machine's terminal enum is `RelayTaskStatus.COMPLETED`, a name used
+only inside this simulation, not the service status `succeeded`. Its commands describe
+enqueue/start/complete operations, not execution of an action.
 
 ## Layout
 
@@ -69,9 +92,6 @@ tests/                the test suite
 pyproject.toml        dependencies, tool settings and gate definition
 ```
 
-There is no separate build description. Dependencies live where pip already
-looks, tool settings live in each tool's own table, and `[tool.pybootstrap]`
-adds only the list of gates.
 ## Python REPL debugging session
 
 After the editable install, inspect log entries and node state:
@@ -84,7 +104,23 @@ After the editable install, inspect log entries and node state:
 >>> public
 >>> inspect.getmembers(lab, inspect.isclass)
 >>> help(lab)
+>>> cluster = lab.ReplicatedRelayCluster(("n1", "n2", "n3"))
+>>> cluster.trigger_timeout("n1") is lab.NodeRole.LEADER
+True
+>>> result = cluster.submit_command(
+...     "n1", lab.EnqueueTask(task_id="task-17", queue="default", created_tick=1),
+... )
+>>> result.committed, cluster.node("n1").commit_index
+(True, 1)
 ```
 
-Inspect one log entry's type, term, index, and command before applying it.
-Compare an appended entry with a committed and applied entry.
+The first command commits at index one because the leader reaches a majority.
+Inspect the leader and follower state-machine snapshots to find `task-17`.
+Then run the isolated-leader test: an entry can exist in its log while the
+task is absent from applied state.
+
+This lab shows when a replicated command may change visible job state
+in the SigRaft job-orchestration web service. Lab 39 does not import this log.
+Finish when you can explain why an isolated leader cannot make its command
+visible, with `pybootstrap check` exit 0. Exit Python to discard all model
+state; no external resources require cleanup.

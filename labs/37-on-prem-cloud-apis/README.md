@@ -1,32 +1,54 @@
-# Lab 37: Operating the on-prem cloud with Python
+# Lab 37 Operating the on-prem cloud with Python
 
-This checkpoint adds one idempotent resource reconciler to `relay`. Narrow
-typed protocols separate its policy from OpenStack, Kubernetes and Harbor,
+This lab compares desired resources with their current state and
+plans the changes needed to make them match. Repeating that comparison after
+a successful change should require no further write. Typed interfaces
+separate this reconciliation policy from OpenStack, Kubernetes and Harbor,
 while a read-only Redfish client supplies physical-system inventory.
 Concrete adapters use OpenStackSDK, the Kubernetes Python client and Harbor's
 v2 HTTP API. Deterministic fakes exercise paging, retries, deadlines and
 ambiguous network outcomes without cloud credentials or a running cluster.
+
+## Goal and activities
+
+Converge owned resource fields without duplicating an operation after an
+ambiguous failure. You will use the supplied reconciler with fakes, then inspect
+the SDK translations and read-only inventory boundary. Installing SDKs does
+not connect this lab to an on-prem cloud.
+
+Read [`CODING_STANDARDS.md`](../CODING_STANDARDS.md) and `AGENTS.md`,
+and run commands from this directory. HTTPX, OpenStackSDK and the Kubernetes
+client are actual declared dependencies. Harbor and Redfish use HTTP APIs;
+none of these remote services is required for default tests.
+
+1. Install and run the REPL create/apply/no-op sequence.
+2. Run `pytest -q tests/test_lab_37_on_prem_cloud_apis.py`. Compare unchanged
+   owned fields with an update and follow a stable idempotency key across retry.
+3. Inspect request loss versus response loss. Reconciliation is not permission
+   to repeat an arbitrary non-idempotent operation.
+4. Change a fake page or rate-limit response and verify bounded paging and
+   remaining deadline. Compare with the same-origin Redfish pagination check.
 
 ## Install and run
 
 Python 3.10 or later is required.
 
 ```bash
-python -m venv .venv
+python3 -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev]"
 pybootstrap check
 ```
 
 `pyproject.toml` declares every runtime and gate dependency. No connection is
-opened at import time. A production composition root creates authenticated
-clients once, injects the adapters, and closes the clients at shutdown.
+opened at import time. Production startup code creates authenticated clients
+once, passes them to the adapters, and closes the clients at shutdown.
 
 ## What to inspect
 
 * `core.py` defines resources, pages, operations, failure categories and the
   reconciler.
-* `adapters.py` translates the three native client surfaces.
+* `adapters.py` translates resource operations into native SDK or HTTP calls.
 * `fakes.py` supplies a bounded, stateful fake for default gates.
 * `redfish.py` discovers a service root and reads bounded, same-origin
   ComputerSystem inventory without exposing management actions.
@@ -37,11 +59,13 @@ clients once, injects the adapters, and closes the clients at shutdown.
 An application credential should create the OpenStack connection. A Kubernetes
 service account should come from the mounted pod configuration. Harbor should
 use a client certificate and an explicit CA trust bundle. Keep secret values
-outside desired resource properties because plans and logs are operator
-evidence.
+outside desired resource properties because operators may inspect those
+properties in plans and logs.
 
-A Redfish inventory client uses HTTPS with verified trust and an account limited
-to read-only hardware health. Session tokens belong in transport headers, not
+A baseboard management controller (BMC) provides hardware inventory independently
+of the operating system. The Redfish client uses HTTPS with certificate
+verification and an account limited to reading hardware health. Session tokens
+belong in transport headers, not
 URLs or logs. The client rejects cross-origin pagination links and bounds pages
 and systems so a BMC cannot redirect or exhaust the collector.
 
@@ -82,17 +106,30 @@ True
 1
 ```
 
+The first plan creates the missing server in the fake. The second plan says
+`noop` because the owned fields already match; the single recorded write
+confirms the second comparison did not create a duplicate.
 Inspect `fake.page_calls`, `fake.put_calls` and `fake.resources` when a test
 does not produce the expected plan. Do not print application credentials,
 service-account tokens, client keys or complete Secret objects.
 
 ## Completion
 
-The checkpoint is complete when:
+The lab is complete when:
 
 ```bash
-PATH=/opt/pyvenv/bin:$PATH pybootstrap check
+pybootstrap check
 ```
 
 exits zero with no network, OpenStack, Kubernetes, Harbor or Redfish service
 available.
+
+This lab demonstrates resource reconciliation and inventory collection
+for the SigRaft job-orchestration web service. Lab 39's read-only inventory can
+be composed with collected data, but it does not automatically import this client
+or contact a BMC.
+Finish when you can explain create/update/no-op, retry ownership and the
+read-only boundary, with `pybootstrap check` exit 0. Exit 1 means findings;
+exit 2 means a gate could not run. Fake resources disappear with Python.
+Close live clients and remove only resources you explicitly created in an
+optional deployment experiment. Never add hardware control actions for cleanup.

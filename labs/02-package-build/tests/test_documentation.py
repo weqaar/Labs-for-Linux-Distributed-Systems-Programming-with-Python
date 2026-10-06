@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Exercise the documentation builders and their failure boundaries."""
+"""Check documentation builds, rejected examples and local HTML retrieval."""
 
 from __future__ import annotations
 
@@ -66,7 +66,7 @@ def test_documentation_rejects_broken_contracts(docs_source: Path, defect: str) 
         example.write_text(example.read_text().replace("'ELF'", "'PE'", 1))
     else:
         expected = "autodoc import side effect"
-        # A raising import exposes the same boundary as a connection without using a network.
+        # Raising on import tests autodoc's error handling without opening a connection.
         (docs_source / "import_trap.py").write_text(
             "# SPDX-License-Identifier: Apache-2.0\n"
             'raise RuntimeError("autodoc import side effect")\n'

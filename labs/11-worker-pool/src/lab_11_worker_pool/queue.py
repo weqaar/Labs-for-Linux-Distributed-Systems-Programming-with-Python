@@ -36,11 +36,11 @@ class VisibilityQueue(Protocol[T]):
         ...
 
     def acknowledge(self, lease_id: str) -> None:
-        """Delete an item after successful handling."""
+        """Acknowledge the current lease so its item is no longer delivered."""
         ...
 
     def pending_count(self) -> int:
-        """Count acknowledged and invisible items that still exist."""
+        """Count unacknowledged items, including those currently invisible."""
         ...
 
     def visible_count(self) -> int:

@@ -43,7 +43,7 @@ class QuorumConfig:
 
 @dataclass(frozen=True)
 class TaskVersion:
-    """One immutable version of a task record."""
+    """One immutable version of a job status."""
 
     version_id: str
     parents: frozenset[str]

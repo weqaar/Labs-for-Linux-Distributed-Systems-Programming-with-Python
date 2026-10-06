@@ -1,7 +1,8 @@
 # Lab 01 First Service
 
-Checkpoint 01 of the relay product. This lab replaces the greeting scaffold
-with the first offline relay core that `relayctl` will call through `/tasks`.
+Checkpoint 01 implements an offline, in-memory stage of SigRaft. The import
+name is `relay`. It stores job submission and status changes before later
+labs add a CLI and the HTTP `/tasks` API.
 
 ## Checks
 
@@ -10,14 +11,15 @@ pip install -e ".[dev]"
 pybootstrap check
 ```
 
-Exit code 1 means a gate found problems. Exit code 2 means a gate could not
-run, so nothing was checked. Treat 2 as more serious than 1: it says the
-tooling is broken, and a broken checker reports nothing while looking fine.
+Exit code 1 means a gate found problems. Exit code 2 means at least one gate
+could not produce a verdict. Other gates may still have useful results.
+Inspect the diagnostics, repair the affected check and rerun it before
+reporting success.
 
 ## Checkpoint focus
 
-- submit relay task definitions like `task-17`
-- report task status at `/tasks/<task-id>`
+- submit jobs with source identifiers such as `task-17`
+- expose `/tasks/<task-id>` as a record's resource path, not a live endpoint
 - keep state in memory with explicit domain errors
 - stay small, typed and offline so later checkpoints can build on it
 
@@ -42,4 +44,4 @@ pytest
 - Gate settings live in `[tool.pybootstrap]`. Tool settings live in each tool's
   own table, so every tool stays usable on its own.
 - Do not add `|| true` to a CI check. It converts a broken gate into a green
-  build, which is worse than no gate at all because it looks like coverage.
+  build, hiding the failed check from the pipeline.

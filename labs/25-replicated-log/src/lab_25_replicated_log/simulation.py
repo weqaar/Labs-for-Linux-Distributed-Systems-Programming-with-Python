@@ -40,7 +40,7 @@ class SimulationClock:
 
 @dataclass(frozen=True)
 class RelayTask:
-    """Replicated relay task record."""
+    """Replicated job status. The code calls this object a relay task."""
 
     task_id: str
     queue: str
@@ -87,7 +87,7 @@ class StateMachineError(RuntimeError):
 
 @dataclass(frozen=True)
 class LogEntry:
-    """Persistent replicated log entry."""
+    """Log entry retained in the simulated node's in-memory state."""
 
     index: int
     term: int
@@ -104,7 +104,7 @@ class LogPosition:
 
 @dataclass
 class PersistentNodeState:
-    """Durable state that survives crashes and restarts."""
+    """Node state retained across simulated restarts, not process loss."""
 
     current_term: int = 0
     voted_for: NodeId | None = None

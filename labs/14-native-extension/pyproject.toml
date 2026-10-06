@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "lab-14-native-extension"
 version = "0.1.0"
-description = "Lab for the corresponding chapter of Linux Distributed Systems Programming with Python."
+description = "Compare Python and C framing helpers for matching results and measured performance."
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [{ name = "Weqaar Janjua", email = "weqaar.janjua@packetfive.com" }]

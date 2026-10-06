@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "lab-39-sigraft-service"
 version = "0.1.0"
-description = "Completed SigRaft service and release lab."
+description = "Operate the SigRaft job-management web service and validate release artifacts."
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [{ name = "Weqaar Janjua", email = "weqaar.janjua@packetfive.com" }]

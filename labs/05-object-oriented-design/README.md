@@ -1,11 +1,36 @@
-# Lab 05: Object-oriented design
+# Lab 05 Object-oriented design
 
-This checkpoint establishes the object boundaries used by later `relay`
-services. It replaces unstructured task dictionaries with immutable domain
-values, keeps storage behind a typed repository protocol, and dispatches task
-actions through polymorphic handlers.
+This lab separates a job's data, its storage and the code that performs
+its action. Immutable `Task` objects prevent accidental changes. A repository
+interface describes storage operations, and handlers implement a common
+operation for different actions.
 
-## Build the checkpoint
+## Goal and setup
+
+Learn which objects own state and which interfaces let implementations change.
+You start with a working reference service, inspect it, then extend its tests
+and handlers. It runs in memory and synchronously, not as an HTTP listener or
+background job system.
+
+Use Python 3.10 or later from this directory. Read
+[`CODING_STANDARDS.md`](../CODING_STANDARDS.md) and `AGENTS.md`.
+The runtime uses standard-library dataclasses, enums, protocols, descriptors
+and decorators; no vendor SDK is needed.
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e ".[dev]"
+pytest -q tests/test_lab_05_object_oriented_design.py
+```
+
+All dependencies, including development tools, belong in `pyproject.toml`.
+
+## Build the lab
+
+Begin with the REPL session below to create `task` and `service`. The following
+investigations explain why those objects behave differently from plain
+dictionaries and functions.
 
 1. At a Python prompt, construct a `Task`. Inspect `type(task)`,
    `isinstance(task, object)`, `id(task)`, `repr(task)`, and the public names
@@ -27,24 +52,31 @@ actions through polymorphic handlers.
 pybootstrap check
 ```
 
-The checkpoint is complete when invalid domain values cannot enter the
+The lab is complete when invalid domain values cannot enter the
 repository, returned collections cannot mutate service state, decorator
 metadata remains inspectable, every action uses the common handler operation,
 and all gates exit zero.
 
-This capability contributes the domain, service, port, and adapter structure
-used by the completed product. Later local and Azure adapters can replace the
-memory repository without moving SDK concerns into task objects.
+SigRaft's job-management web service also separates job values, service
+operations and storage. Here, `TaskRepository` defines the methods the service
+calls, and the in-memory adapter implements them. This independent package is
+not imported by Lab 39. A production storage adapter would implement those
+methods without moving SDK-specific code into task objects.
 
 ## Python REPL debugging session
 
 ```pycon
 >>> import inspect
 >>> import lab_05_object_oriented_design as lab
+>>> lab.__name__, lab.__file__
 >>> task = lab.Task("task-17", lab.TaskAction.INDEX, "documents")
 >>> type(task), isinstance(task, object), repr(task)
 >>> [name for name in dir(task) if not name.startswith("_")]
 >>> service = lab.build_default_service()
+>>> service.submit(task).state.value
+'queued'
+>>> service.run("task-17").state.value
+'succeeded'
 >>> service.submit.__self__ is service
 True
 >>> service.submit.__func__ is type(service).submit
@@ -54,4 +86,18 @@ True
 ```
 
 This session separates the object, its class, its public attributes, and the
-bound method that supplies `self`.
+bound method that supplies `self`. The two `True` results show that the method
+keeps both its owning instance and the underlying class function; Python
+supplies the instance when you call it.
+
+Inspect `TaskService.run` before adding failure behavior: the supplied method
+does not catch handler exceptions and mark the task failed, so an exception
+leaves the stored task running. `Task.with_state` copies a value without
+checking transition order, and `run` can run a terminal task again. Immutability
+protects a snapshot from mutation; it does not enforce a complete lifecycle.
+
+On completion, explain immutable snapshots, structural protocols, method
+binding and decorator metadata. `pybootstrap check` must exit 0; exit 1
+reports findings and exit 2 reports a gate that could not run. Exit the REPL
+and deactivate the environment. In-memory tasks and audit events disappear
+with the process; there are no external resources to destroy.

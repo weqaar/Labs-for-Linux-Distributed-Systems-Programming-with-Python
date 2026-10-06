@@ -1,6 +1,6 @@
 # Lab 20 Zeromq Patterns
 
-Orientation for anyone, human or AI, working in this repository.
+Development and review guidance for this lab.
 
 ## Checks
 
@@ -9,9 +9,9 @@ pip install -e ".[dev]"
 pybootstrap check
 ```
 
-Exit code 1 means a gate found problems. Exit code 2 means a gate could not
-run, so nothing was checked. Treat 2 as more serious than 1: it says the
-tooling is broken, and a broken checker reports nothing while looking fine.
+Exit code 1 means a gate found problems. Exit code 2 means at least one gate
+could not produce a verdict. Other gates may still have useful results.
+Read the gate output, repair the failed tool or configuration, and rerun.
 
 ## Layout
 
@@ -64,8 +64,9 @@ tests/                the test suite
 - A task ID resubmitted with a different action or target must raise
   `TaskFingerprintConflictError`, never be honoured under the earlier
   submission's identity and never silently overwrite it.
-- The ledger's retained entries are bounded by `max_ledger_entries` and
-  evicted least-recently-touched first, skipping anything still in flight.
+- The ledger evicts entries above `max_ledger_entries` least-recently-touched
+  first, skipping anything still in flight. In-flight entries can exceed the
+  limit; do not describe it as a hard cap on all retained state.
   A change to the eviction policy needs a test that actually exceeds the
   bound and asserts on `ledger_size()`, not just a code review claim.
 - `submit()` validates a requested resource label against

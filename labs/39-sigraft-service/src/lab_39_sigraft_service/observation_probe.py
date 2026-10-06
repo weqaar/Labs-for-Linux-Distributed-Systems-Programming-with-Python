@@ -39,7 +39,11 @@ def collect_observations(
     clock: Callable[[], int] = monotonic_ns,
     now: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
 ) -> None:
-    """Exercise both public endpoints and write one fixed-schema CSV."""
+    """Record submission latency at baseline and candidate URLs in a fixed-schema CSV.
+
+    Success means the submission was accepted, not that the action ran.
+    Queue depth is recorded as zero rather than measured.
+    """
 
     if not 10 <= count <= 1_000:
         raise ValueError("count must be between 10 and 1000 per release")

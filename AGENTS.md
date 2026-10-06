@@ -9,17 +9,21 @@ These are the reader-facing labs for *Linux Distributed Systems Programming
 with Python*. The book source is private and must not be added here.
 
 The labs are independently runnable stages of one job-management web service,
-not unrelated examples. Labs 1 through 38 develop its capabilities under the name
-named `relay`, operated through `relayctl`. Lab 39 assembles those contracts as
-the SigRaft REST and GraphQL service, resource scheduler, CLI, operational
-report and Azure and on-prem release paths. Its optional WebSocket listener
-shares job records with HTTP, but neither interface starts worker execution.
-Keep the documentation exercises and release guides aligned with these limits.
+not unrelated examples. SigRaft is that service. Labs 1 through 38 import
+their Python package as `relay` and use the command `relayctl`. Those are
+source names. The program does not relay network traffic. Lab 39 assembles
+the same contracts as the SigRaft service, resource scheduler, `sigraftctl`
+client, operational report and Azure and on-prem release paths. REST means
+request and response over HTTP. GraphQL is a query language for one endpoint.
+Its optional WebSocket listener shares in-memory jobs with HTTP, but neither
+interface starts worker execution. Keep the documentation exercises and
+release guides aligned with these limits.
 
-Keep the product contract stable:
+Keep the product contract stable. Reader-facing prose says job. The code
+keeps these names:
 
-- task identifiers look like `task-17`
-- tasks move through `queued`, `running`, `succeeded` and `failed`
+- job identifiers look like `task-17`
+- a job has an action and a status of `queued`, `running`, `succeeded` or `failed`
 - the HTTP resource is `/tasks`
 - network, clock, storage, runtime and cloud dependencies use typed adapters
 - tests use deterministic fakes and do not require an Azure subscription

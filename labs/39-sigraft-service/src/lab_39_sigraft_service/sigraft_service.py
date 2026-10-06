@@ -53,7 +53,7 @@ class SigRaftTask:
 
 @dataclass
 class SigRaftService:
-    """An in-memory SigRaft service with observable HTTP boundaries."""
+    """Store jobs in memory and expose shared methods to HTTP and WebSocket clients."""
 
     release_digest: str
     config_manager: ConfigManager | None = None
@@ -118,7 +118,7 @@ class SigRaftService:
             checkpoint: Optional positive chapter checkpoint.
 
         Returns:
-            An immutable job record. Its identifier is local to this process.
+            An immutable job status. Its identifier is local to this process.
 
         Raises:
             ValueError: If the action or checkpoint violates the input contract.
@@ -200,7 +200,7 @@ class SigRaftService:
             if len(self._subscriptions) >= 32:
                 raise ValueError("subscription capacity reached")
             subscription = JobSubscription(task_id)
-            # The same lock protects transitions, closing the snapshot/live gap.
+            # A transition cannot occur between reading state and registering the observer.
             subscription.publish(JobEvent(self._sequence, asdict(record)))
             self._subscriptions.add(subscription)
             return subscription
@@ -570,7 +570,7 @@ def create_service(
     watch_config: bool,
     poll_interval: float,
 ) -> SigRaftService:
-    """Create the configured production service and optional file watcher."""
+    """Create the configured in-memory service and optional file watcher."""
 
     manager = ConfigManager.from_bytes(config_path.read_bytes())
     settings = manager.snapshot.settings

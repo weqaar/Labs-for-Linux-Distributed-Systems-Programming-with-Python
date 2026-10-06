@@ -1,9 +1,8 @@
-"""Orchestration: load a CSV, run the analysis, render the report.
+"""Load a CSV, run the analysis and render the report.
 
 Kept separate from the HTTP service so the entire pipeline can be tested
 without a socket, and so the same functions can be reused from a script or a
-REPL. Every function here takes a path or a frame; nothing reaches out to a
-live telemetry backend.
+REPL. Loading reads the supplied path; nothing contacts a live telemetry backend.
 """
 
 from __future__ import annotations

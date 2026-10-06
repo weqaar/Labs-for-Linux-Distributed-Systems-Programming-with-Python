@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "lab-09-azure-sdk"
 version = "0.1.0"
-description = "Relay checkpoint 06: Azure blob and queue adapters."
+description = "Store task documents and enqueue work with Azure adapters in relay checkpoint 09."
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [{ name = "Weqaar Janjua", email = "weqaar.janjua@packetfive.com" }]

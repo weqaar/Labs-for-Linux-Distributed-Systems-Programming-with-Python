@@ -1,92 +1,114 @@
-# Lab 01 First Service
+# Lab 01 First service
 
-This checkpoint turns the scaffold into the first relay service core. It is
-still offline and in memory, but it already uses the product vocabulary that
-later chapters keep: task IDs like `task-17`, actions, states
-`queued/running/succeeded/failed`, and the REST path `/tasks` that
-`relayctl` will target.
+## Goal and purpose
 
-## Capability added here
+Learn how a job moves through a small, explicit lifecycle before adding a
+network, a command-line client or persistent storage. The supplied reference
+implementation is the first in-memory stage of SigRaft. The import name
+in this lab is `relay`. That name does not mean the program relays traffic.
 
-- submit a task definition into relay
-- read task status back from `/tasks/<task-id>`
-- move work from `queued` to `running` to `succeeded` or `failed`
-- reject bad task IDs, missing tasks and impossible state changes with
-  explicit domain errors
+You will inspect the implementation, submit a job, change its state,
+and test rejected operations. You are not starting an HTTP server or running
+`relayctl` here. The code stores a path such as `/tasks/task-17` on the
+Python object that holds the job status. That path is a field, not a
+listening network address. An action such as `rebuild-search-index` is stored
+text; this lab does not execute it.
 
-Example shape for the later CLI:
+A job definition says what work is requested. A job status says where that
+work is in its lifecycle. The code calls the status object `TaskRecord`.
+That is a Python object, not a database record and not a file. Keeping the
+definition and the status separate lets you test a change of state without
+a worker that performs the work.
 
-```text
-relayctl submit --task-id task-17 --action rebuild-search-index
-relayctl status task-17
-```
+## Prerequisites and setup
 
-## Getting started
-
-Read the shared [`CODING_STANDARDS.md`](../../CODING_STANDARDS.md) first. It
-defines the type, object-design, validation, error-handling, resource and test
-rules used by every checkpoint.
+Use Python 3.10 or later and a shell in `labs/01-first-service`. Read
+[`CODING_STANDARDS.md`](../CODING_STANDARDS.md) and this lab's `AGENTS.md`.
+Create an isolated environment so later labs' independently installed packages
+and commands do not replace this lab.
 
 ```bash
-python -m venv .venv && source .venv/bin/activate
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -e ".[dev]"
 ```
 
-## Quality gates
+Python dataclasses group the fields of a job definition and a job status.
+An enum gives the states fixed names. The service stores each job status in
+a dictionary keyed by the job identifier. In this code that identifier looks
+like `task-17`. There are no runtime third-party packages.
+Ruff, Pyright, pytest and pybootstrap are development tools declared in
+`pyproject.toml`. Installing them can require network access; running the
+core and its tests needs no Azure subscription or external service.
 
-```bash
-pybootstrap check
-```
+An empty dependency list does not prove absence of networking. Python's
+standard library can open sockets. Inspecting `relay.py` shows what this
+implementation actually does: validate values and update its own dictionary.
 
-Direct commands stay the same locally and in CI:
-
-```bash
-ruff format --check src tests
-ruff check src tests
-pyright src tests
-pytest
-```
 ## Python REPL debugging session
 
-After the editable install, inspect the package actually loaded by Python:
+1. Read `src/lab_01_first_service/relay.py` and
+   `tests/test_lab_01_first_service.py`. Locate validation in `submit` and
+   the state check used by `start_task`, `succeed_task` and `fail_task`.
+2. Start `python` after the editable install. This opens the interactive prompt,
+   also called the REPL. Enter the lines after `>>>`, without copying the prompt
+   itself. Inspect the installed package before calling its API.
 
 ```pycon
 >>> import inspect
 >>> import lab_01_first_service as lab
 >>> lab.__name__, lab.__file__
->>> public = [name for name in dir(lab) if not name.startswith("_")]
->>> public
->>> [(name, type(getattr(lab, name)).__name__) for name in public]
->>> inspect.getmembers(lab, inspect.isclass)
->>> help(lab)
+>>> inspect.signature(lab.InMemoryRelayService.submit)
+>>> service = lab.InMemoryRelayService()
+>>> definition = lab.TaskDefinition("task-17", "rebuild-search-index")
+>>> type(definition), repr(definition)
+>>> queued = service.submit(definition)
+>>> queued.state.value, queued.resource_path
+('queued', '/tasks/task-17')
+>>> service.start_task("task-17").state.value
+'running'
+>>> service.succeed_task("task-17", detail="exercise complete").state.value
+'succeeded'
+>>> service.get_status("task-17").detail
+'exercise complete'
+>>> queued.state.value
+'queued'
 ```
 
-Select one public callable, inspect its signature, then construct the smallest
-valid relay object and inspect its `type`, `repr`, and public attributes. Do not
-call every name returned by `dir()`: discovery does not prove a call is safe.
+The earlier status object remains queued because a transition returns a new
+object instead of changing the old one. The current status lives in the
+service. A new `InMemoryRelayService()` has an empty `list_tasks()` tuple;
+nothing is recovered from disk.
 
-## Checking the data boundary
+3. Submit `task-18`, start it, then call
+   `service.fail_task("task-18", "exercise failure")`. Observe `failed` and
+   the reason. Try submitting `task-17` again, querying `task-99`, and
+   completing a newly queued task without starting it. Expect
+   `TaskAlreadyExists`, `TaskNotFound` and `InvalidTaskTransition`,
+   respectively. These are deliberate errors, not successful operations.
+4. Run the behavioral tests. Add a test that a blank failure reason is
+   rejected and the running job remains unchanged. Keep the implementation's
+   lifecycle rather than bypassing validation to make the test pass.
 
-Chapter 1 asks you to verify a data boundary rather than assume one, whether
-the agent reading your code is hosted or local. This checkpoint gives a small,
-checkable example of that idea: `dependencies = []` in `pyproject.toml` is a
-claim that nothing here can reach a network, and the claim can be checked in
-the same REPL session rather than taken on trust.
-
-```pycon
->>> import ast, inspect
->>> import lab_01_first_service as lab
->>> source = inspect.getsource(lab.relay)
->>> tree = ast.parse(source)
->>> imported = sorted(
-...     {node.names[0].name for node in ast.walk(tree) if isinstance(node, ast.Import)}
-...     | {node.module for node in ast.walk(tree) if isinstance(node, ast.ImportFrom)}
-... )
->>> imported
+```bash
+pytest -q tests/test_lab_01_first_service.py
+pybootstrap check
 ```
 
-The result is `['__future__', 'dataclasses', 'enum', 're']`: no socket, no
-`http`, no third-party client. That is what makes this checkpoint's offline
-claim in `AGENTS.md` a checked boundary instead of an assertion, and it is the
-same discipline Chapter 1 asks you to apply to any coding agent, local or
-hosted, before trusting what it says about where your data goes.
+## Contribution and completion
+
+SigRaft uses the same job identifiers, actions, resource paths and
+`queued`, `running`, `succeeded` or `failed` states. The code writes
+identifiers as `task-17` and paths as `/tasks/task-17`. Practising submission and
+state changes here lets you recognize those operations when later labs
+add transports and storage adapters. Lab 39 has its own implementation; it
+does not need to import this package.
+
+Finish when you can distinguish a job definition from a job status, explain why
+an invalid transition fails without changing state, and demonstrate both
+terminal outcomes. `pybootstrap check` must exit 0 after every configured
+gate runs. Exit 1 means a gate found a problem; exit 2 means a gate could not
+run and supplied no verdict.
+
+Exit Python with `exit()` and deactivate the environment with `deactivate`.
+There are no listeners, cloud resources or saved jobs to remove.

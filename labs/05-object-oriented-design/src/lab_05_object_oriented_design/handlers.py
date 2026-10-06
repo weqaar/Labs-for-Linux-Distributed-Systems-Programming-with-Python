@@ -34,7 +34,7 @@ class HandlerMeta(type(ABC)):
 
 
 class Handler(ABC, metaclass=HandlerMeta):
-    """Nominal base where shared lifecycle behavior is required."""
+    """Abstract base requiring each registered action to implement execute."""
 
     action: ClassVar[TaskAction]
 
@@ -44,14 +44,14 @@ class Handler(ABC, metaclass=HandlerMeta):
 
 
 class PrefixMixin:
-    """Cooperative mixin adding a stable result prefix."""
+    """Supply the shared prefix used in handler result text."""
 
     def prefix(self) -> str:
         return "relay"
 
 
 class IndexHandler(PrefixMixin, Handler):
-    """Index task handler."""
+    """Return illustrative index-result text without building an index."""
 
     action = TaskAction.INDEX
 
@@ -60,7 +60,7 @@ class IndexHandler(PrefixMixin, Handler):
 
 
 class ArchiveHandler(PrefixMixin, Handler):
-    """Archive task handler."""
+    """Return illustrative archive-result text without moving data."""
 
     action = TaskAction.ARCHIVE
 

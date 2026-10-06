@@ -1,23 +1,17 @@
 """Schema and validation for relay operational observations.
 
-A row is one completed relay task attempt, of the shape Chapter 34's request
-telemetry would export: a timestamp, the task and release it belongs to, the
-queue depth measured when it was submitted, how long it took, and how it
-ended. Validation is explicit and total. A row that does not match the
+A row is one completed relay task attempt: a timestamp, its task and release,
+the queue depth measured when it was submitted, how long it took, and how it
+ended. A row that does not match the
 documented schema is counted and its reason kept, never silently dropped or
 silently repaired, so a report can state exactly how much of the input it
 used.
 
-Two properties matter beyond the CSV's own logic. First, the header itself
-is part of the schema: a file with an undocumented extra column is rejected
-outright rather than accepted with the extra column ignored, because a
-schema that silently tolerates unknown columns is not documented at all.
-Second, ``task_id``, ``release`` and ``region`` are eventually rendered into
-an HTML page and an SVG chart. Bounding their length and character set here,
-before an :class:`Observation` ever exists, means the renderer never has to
-trust that a value it received earlier in the pipeline is safe; escaping at
-render time and bounding at ingestion time are both done, neither substitutes
-for the other.
+The header must contain exactly the documented columns, so an unexpected
+export format fails instead of silently losing fields. Length and character
+limits on ``task_id``, ``release`` and ``region`` reject malformed labels
+before creating an :class:`Observation`. The renderer still escapes values
+for HTML and SVG; validation does not replace output escaping.
 """
 
 from __future__ import annotations
@@ -115,11 +109,10 @@ def _validate_safe_token(value: str, field: str, max_length: int) -> str:
 
 
 def _parse_utc_timestamp(raw: str) -> datetime:
-    """Parse a UTC timestamp, rejecting anything without an explicit offset.
+    """Parse a UTC timestamp, requiring the schema's trailing ``Z``.
 
-    A wall-clock string with no zone is not a fact until it is anchored to
-    UTC, which is why the schema requires the trailing ``Z`` rather than
-    guessing a local zone.
+    A timestamp without a zone does not identify an unambiguous instant.
+    Reject it rather than guessing the server's local timezone.
     """
     if not raw.endswith("Z"):
         raise ValueError("timestamp must be UTC and end with 'Z'")
@@ -193,10 +186,9 @@ def load_observations(path: Path) -> LoadReport:
 
     Every row is checked. A row that fails validation is recorded in
     ``rejected`` with its reason instead of being dropped or coerced. A
-    repeated task identifier is not rejected: Chapter 35 treats a retried
-    task as a duplicated observation of the same unit of analysis, valid on
-    its own but counted so an average is not silently inflated by a client's
-    retries.
+    repeated task identifier is counted, not rejected. Retried attempts remain
+    in the data and affect attempt-level averages; the duplicate count does not
+    make those observations statistically independent.
     """
     observations: list[Observation] = []
     rejected: list[RejectedRow] = []
@@ -206,10 +198,7 @@ def load_observations(path: Path) -> LoadReport:
     with path.open(newline="", encoding="utf-8") as handle:
         reader = csv.DictReader(handle)
         fieldnames = reader.fieldnames
-        # An exact match, not a subset check: a column the schema does not
-        # document is rejected outright rather than silently carried along
-        # and ignored, which is what "documented schema" has to mean for a
-        # header as much as for a row.
+        # Reject unexpected columns instead of silently discarding export fields.
         if fieldnames is None or set(fieldnames) != set(REQUIRED_COLUMNS):
             raise ValueError(f"{path} does not have the documented columns: {REQUIRED_COLUMNS}")
         for line_number, raw in enumerate(reader, start=2):

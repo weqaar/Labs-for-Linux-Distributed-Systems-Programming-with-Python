@@ -1,4 +1,4 @@
-"""Deterministic resource scheduling for the SigRaft task service."""
+"""Deterministic resource scheduling for the SigRaft job-management web service."""
 
 from lab_38_resource_scheduling.scheduler import (
     Allocation,

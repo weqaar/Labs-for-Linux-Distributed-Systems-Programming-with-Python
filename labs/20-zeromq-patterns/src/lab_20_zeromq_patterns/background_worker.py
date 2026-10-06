@@ -1,4 +1,4 @@
-"""Celery background-worker boundary for relay web requests."""
+"""Submit relay jobs from web requests to Celery background workers."""
 
 from __future__ import annotations
 

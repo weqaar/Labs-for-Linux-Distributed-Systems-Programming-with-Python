@@ -1,10 +1,8 @@
-"""Rendering: a deterministic accessible SVG chart and a safe HTML report.
+"""Render a deterministic accessible SVG chart and an escaped HTML report.
 
-Chapter 35's rule is that a chart never travels without the numbers it was
-drawn from. This module keeps that rule structurally: the HTML page always
-prints the descriptive statistics, the confidence interval, the comparison
-and the regression as text and tables, and the chart is one more view of the
-same numbers rather than a replacement for them.
+The HTML includes descriptive statistics, the confidence interval, the release
+comparison and the regression as text and tables. Readers can inspect the
+numbers as well as the chart.
 """
 
 from __future__ import annotations
@@ -143,9 +141,7 @@ def render_svg_report(
 
         fig.tight_layout()
         buffer = io.StringIO()
-        # Date metadata is suppressed so that the same input renders to the
-        # same bytes on every run, which the deterministic-output tests and
-        # the reproducibility guidance in Chapter 35 both rely on.
+        # Suppress date metadata so repeated renders can produce identical bytes.
         fig.savefig(buffer, format="svg", metadata={"Date": None})
         svg_text = buffer.getvalue()
     finally:

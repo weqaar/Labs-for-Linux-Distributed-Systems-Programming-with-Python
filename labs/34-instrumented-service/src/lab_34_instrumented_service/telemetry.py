@@ -526,7 +526,7 @@ def load_diagnosis_query(root: Path | None = None) -> str:
 
 
 def validate_diagnosis_query(query: str) -> None:
-    """Check that the KQL artifact can identify a bad dependency."""
+    """Check for the KQL clauses used to group dependency failures; do not run the query."""
 
     required_fragments = [
         "AppRequests",

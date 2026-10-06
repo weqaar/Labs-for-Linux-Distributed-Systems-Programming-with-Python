@@ -1,19 +1,40 @@
 # Lab 17 Wire Format
 
-Compare a presence-aware JSON patch with two versions of a Protocol Buffers task
-schema. The tests run old-reader/new-writer and new-reader/old-writer pairs.
+Change a task message without breaking a reader that still uses an older
+version. The JSON example distinguishes leaving an owner unchanged from
+clearing or replacing it. The Protocol Buffers examples exchange task messages
+between old and new schema versions.
+
+## Goal and activities
+
+Evolve messages without confusing an omitted value with an explicit removal.
+The supplied codecs operate on bytes, not a broker or HTTP service. Their
+contribution to the SigRaft job-management web service is compatibility
+reasoning; Lab 39 does not import these generated modules.
+
+Use Python 3.10 or later in this directory and read
+[`CODING_STANDARDS.md`](../CODING_STANDARDS.md) and `AGENTS.md`.
+JSON uses the standard library; Protocol Buffers uses the declared `protobuf`
+runtime. `grpc_tools.protoc` is supplied by the development extra, not a
+separately maintained dependency list. No subscription or live service is needed.
+
+1. Install and compare absent, null and nonempty owner values in the REPL.
+2. Read both `.proto` files and identify stable and reserved field numbers.
+3. Run `pytest -q tests/test_lab_17_wire_format.py`. Trace the unknown owner
+   field through an old reader back into a new reader.
+4. Make a compatible schema extension, regenerate as below, and add a
+   version-skew test. Do not reuse a retired number.
 
 ## Getting started
 
 ```bash
-python -m venv .venv && source .venv/bin/activate
+python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 ```
 
 ## Quality gates
 
-The same command runs on a laptop and in CI, so a failure is always
-reproducible:
+Run the configured checks before considering the lab complete:
 
 ```bash
 pybootstrap check
@@ -38,11 +59,10 @@ pytest
 |---|---|
 | 0 | Every gate passed |
 | 1 | A gate ran and found problems |
-| 2 | A gate could not run, so nothing was checked |
+| 2 | A gate could not run and supplied no verdict |
 
-The split between 1 and 2 is the point. A missing or misconfigured tool is not
-the same as clean code, and a pipeline that treats them alike will eventually
-report success while checking nothing.
+Fix findings reported by exit 1. For exit 2, repair the tool or its
+configuration and rerun it; an unavailable check cannot establish a pass.
 
 ## Layout
 
@@ -53,9 +73,6 @@ schemas/               old and new .proto contracts
 pyproject.toml        dependencies, tool settings and gate definition
 ```
 
-There is no separate build description. Dependencies live where pip already
-looks, tool settings live in each tool's own table, and `[tool.pybootstrap]`
-adds only the list of gates.
 
 ## Regenerate Protobuf code
 
@@ -78,7 +95,7 @@ Protobuf tests prove that an old reader preserves fields it cannot interpret
 when it relays the message.
 ## Python REPL debugging session
 
-After the editable install, inspect both serialization boundaries:
+After the editable install, compare JSON field presence with Protobuf decoding:
 
 ```pycon
 >>> import inspect
@@ -88,7 +105,23 @@ After the editable install, inspect both serialization boundaries:
 >>> public
 >>> inspect.getmembers(lab, inspect.isclass)
 >>> help(lab)
+>>> from lab_17_wire_format.json_codec import decode_owner_patch
+>>> [decode_owner_patch(body).operation.name for body in
+...  (b"{}", b'{"owner": null}', b'{"owner": "reader"}')]
+['UNCHANGED', 'CLEAR', 'SET']
+>>> from lab_17_wire_format.pb import task_v1_pb2
+>>> from lab_17_wire_format.protobuf_codec import decode_v2
+>>> task = task_v1_pb2.Task(id="task-17", action="index")
+>>> decode_v2(task.SerializeToString()).id
+'task-17'
 ```
 
-Construct one task, inspect its Python type, encode it, inspect the byte length,
-and decode it back before comparing equality.
+The three JSON results are three requested operations, even though the first
+two contain no owner string. The Protobuf result shows that a new reader can
+recover an old message's task ID. Follow the reverse-direction test next to
+see what an old reader does with fields it does not recognize.
+
+Finish when you can explain presence, unknown-field preservation and the
+difference between decoding and domain validation. `pybootstrap check` must
+exit 0. Review generated diffs and remove only scratch payloads you created.
+No sockets, queues or cloud resources are opened by these examples.

@@ -1,4 +1,4 @@
-"""Safe interpreter inspection helpers."""
+"""Inspect Python objects, mapping entries and bytecode."""
 
 from __future__ import annotations
 
@@ -27,7 +27,10 @@ class BytecodeRow:
 
 
 def inspect_object(value: object) -> ObjectSnapshot:
-    """Capture the facts commonly queried in an interactive Python session."""
+    """Return an object's type, identity, attributes, state and callable signature.
+
+    Attribute lookup and repr can run user-defined methods; inspect trusted objects.
+    """
 
     namespace = vars(value) if hasattr(value, "__dict__") else {}
     state = {str(name): repr(item) for name, item in namespace.items()}
@@ -47,7 +50,7 @@ def inspect_object(value: object) -> ObjectSnapshot:
 
 
 def inspect_bytecode(function: types.FunctionType) -> tuple[BytecodeRow, ...]:
-    """Return version-specific CPython instructions as structured evidence."""
+    """Return instruction offsets, names, arguments and source lines for a function."""
 
     return tuple(
         BytecodeRow(

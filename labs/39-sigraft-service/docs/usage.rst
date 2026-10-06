@@ -5,7 +5,7 @@ Install the package and developer tools from this lab directory::
 
    python -m pip install -e ".[dev]"
 
-The default HTTP service is unchanged. Supply the actual release digest when
+HTTP is the default client transport. Supply the actual release digest when
 deploying; the repeated hexadecimal character below identifies only a local
 exercise::
 
@@ -16,6 +16,11 @@ exercise::
 
 Use the identifier returned by submission. ``task-1`` assumes a fresh process.
 HTTP status requests return once. They do not maintain a subscription.
+
+``config.example.toml`` selects the Compose collector at ``otel-collector``.
+For an offline run without that collector, follow the README setup to copy
+the configuration locally and select the ``memory`` exporter, then supply
+that local path instead. This changes telemetry export, not job behavior.
 
 Optional WebSocket listener
 ---------------------------
@@ -59,8 +64,8 @@ Stop the earlier server, then start both listeners::
 The watch command prints newline-delimited JSON: a current snapshot followed
 by state changes, each carrying a sequence and listener epoch. It stops on
 ``succeeded`` or ``failed``; Ctrl+C cancels with exit status 130.
-An accepted job remains queued until a trusted executor records a transition.
-No timer fabricates progress.
+An accepted job remains queued until trusted code calls
+``SigRaftService.transition_task``. Elapsed time alone does not change its state.
 
 GraphQL queries and mutations also work with ``--transport websocket``.
 They use the same resolvers as HTTP. WebSocket permissions come from the server
@@ -68,7 +73,7 @@ credential file; the HTTP exercise's caller-supplied ``--scope`` does not grant
 permissions to a WebSocket principal.
 
 The listener binds only to loopback and rejects browser Origin headers.
-For remote CLI access, place it behind a TLS-authenticated deployment boundary
+For remote CLI access, place it behind a TLS proxy
 that forwards the WebSocket upgrade and Authorization header, and use
 ``wss://``. The client rejects plaintext remote connections. The static lab
 tokens do not implement token expiry, tenant ownership or an identity provider.

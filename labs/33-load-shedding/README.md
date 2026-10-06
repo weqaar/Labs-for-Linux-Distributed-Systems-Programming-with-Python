@@ -1,10 +1,35 @@
 # Lab 33 Load Shedding
 
-This checkpoint replaces queue growth by making the relay service say no early.
-All behaviour is deterministic, so the tests prove bounded latency without
-sleeping or waiting on Azure Service Bus.
+This lab rejects new SigRaft jobs when its workers and queue are full.
+The Python import name is `relay`; the program does not relay traffic.
+The supplied simulation demonstrates bounds for a fixed time per job
+without sleeping or waiting on Azure Service Bus. It does not measure or
+guarantee latency in a deployed service.
+
+## Goal and activities
+
+Reject work before capacity is exhausted and keep retries from multiplying
+load. You will advance simulated time and inspect decisions, not run a broker or
+load-test a web server. Use Python 3.10 or later here and read
+[`CODING_STANDARDS.md`](../CODING_STANDARDS.md) and `AGENTS.md`.
+Runtime logic uses standard-library values and injected randomness;
+dependencies are declared in `pyproject.toml`.
+
+1. Install and fill the admission model in the REPL.
+2. Run `pytest -q tests/test_lab_33_load_shedding.py`. For two workers and
+   four queue slots, twelve simultaneous requests yield six admissions and
+   six rejections in the supplied test.
+3. Inspect `Retry-After`, bounded jitter and the shared retry budget. Compare
+   the modeled application retry limit with disabled SDK retries.
+4. Step the breaker through open and half-open, then inspect poison-message
+   dead-lettering. Add a boundary case without sleeping.
 
 ## Components
+
+Follow the decision in order: admission accepts or rejects new work, retry
+policy decides when another attempt is allowed, and the consumer records
+messages it can no longer process. A circuit breaker stops calls temporarily
+after failures; a half-open breaker permits a limited recovery probe.
 
 - `AdmissionController` caps worker slots and queue depth, then returns an
   explicit `Retry-After` hint when the service is full.
@@ -17,7 +42,7 @@ sleeping or waiting on Azure Service Bus.
 ## Getting started
 
 ```bash
-python -m venv .venv && source .venv/bin/activate
+python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 ```
 
@@ -38,7 +63,25 @@ After the editable install, inspect admission and retry policy:
 >>> public
 >>> inspect.getmembers(lab, inspect.isclass)
 >>> help(lab)
+>>> from lab_33_load_shedding.backpressure import AdmissionController, RelayMessage
+>>> controller = AdmissionController(workers=1, queue_limit=1, service_time_ms=50)
+>>> decisions = [controller.submit(RelayMessage(f"task-{n}", "index"), 0)
+...              for n in (17, 18, 19)]
+>>> [decision.accepted for decision in decisions]
+[True, True, False]
+>>> controller.drain()
 ```
 
-Construct one policy with a fake clock, inspect its immutable settings, and
-step through accepted, rejected, and retried outcomes.
+At time zero, one job takes the worker and another takes the only queue slot.
+The third is rejected. `drain()` advances the simulation to complete accepted
+work; it does not wait for a real worker. Inspect the rejected decision's
+retry hint before adding a later submission.
+
+## Contribution and completion
+
+These policies inform admission and retry design for the SigRaft
+job-orchestration web service; Lab 39 does not import this simulator.
+Finish when you can distinguish capacity rejection, retry exhaustion and a
+poison message, and `pybootstrap check` exits 0. Exit 1 means findings;
+exit 2 means a gate could not run. No Azure subscription is needed.
+Exit Python to discard queues, counters and the modeled dead-letter list.

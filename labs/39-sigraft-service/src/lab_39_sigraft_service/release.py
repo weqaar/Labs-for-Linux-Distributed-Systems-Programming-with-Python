@@ -83,7 +83,7 @@ class ReleaseEvidence:
         return cls.from_mapping(cast(dict[str, Any], payload))
 
     def validate_for_deploy(self, expected_commit: str) -> None:
-        """Verify the evidence is good enough to deploy *expected_commit*."""
+        """Validate recorded gates, component entries and digests for *expected_commit*."""
 
         if self.commit != expected_commit:
             raise ArtifactValidationError(
@@ -656,7 +656,7 @@ def validate_onprem_pipeline(pipeline: dict[str, Any]) -> None:
 
 
 def validate_playbook(playbook: list[dict[str, Any]]) -> None:
-    """Check that the self-hosted agent playbook stays idempotent."""
+    """Check required playbook declarations and reject shell tasks without running Ansible."""
 
     if len(playbook) != 1:
         raise ArtifactValidationError("playbook must contain exactly one play")

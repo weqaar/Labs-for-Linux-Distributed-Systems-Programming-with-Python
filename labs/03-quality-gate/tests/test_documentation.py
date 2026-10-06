@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Prove documentation checks execute and reject broken evidence."""
+"""Check that documentation builds reject bad references, examples and imports."""
 
 from __future__ import annotations
 
