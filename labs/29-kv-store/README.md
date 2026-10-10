@@ -21,8 +21,8 @@ partition key may have to inspect several partitions. Request units represent
 database work, not elapsed time. The fake assigns fixed costs so this
 difference is visible without treating a benchmark as a pricing estimate.
 
-An ETag identifies a record version for conditional updates. Time to live
-(TTL) limits how long a record remains available; the fake clock lets you test
+An ETag identifies one version of a stored item for conditional updates. Time to live
+(TTL) limits how long an item remains available; the fake clock lets you test
 that limit immediately.
 
 1. Install and inspect the container policy in the REPL.
@@ -30,7 +30,7 @@ that limit immediately.
    tenant-query and cross-partition accounting.
 3. Patch with the current ETag, then retry with the original one and expect
    `ConditionalWriteFailedError`.
-4. Advance `FixedClock` past a test record's TTL and observe
+4. Advance `FixedClock` past a test item's TTL and observe
    `TaskNotFoundError`. Do not wait for real elapsed time.
 
 ## Relay task contract
@@ -72,9 +72,24 @@ pip install -e ".[dev]"
 ```bash
 pybootstrap check
 ```
+
+## Tests
+
+`tests/test_lab_29_kv_store.py` holds the unit tests. They check the
+container policy, request-unit accounting, ETag checks, TTL expiry and query
+ordering one operation at a time.
+
+`tests/test_functional.py` holds the functional tests. They build the
+repository from `FakeCosmosClient` and the default container model, then use
+its public methods to move job `task-17` from `queued` to `succeeded`, reject
+a duplicate job identifier and a stale ETag, and let a finished job expire.
+
+Run each kind alone with `pytest tests/test_lab_29_kv_store.py` or
+`pytest tests/test_functional.py`. `pybootstrap check` runs both.
+
 ## Python REPL debugging session
 
-After the editable install, inspect keys, records, and repository methods:
+After the editable install, inspect keys, items, and repository methods:
 
 ```pycon
 >>> import inspect
@@ -90,7 +105,7 @@ After the editable install, inspect keys, records, and repository methods:
 >>> inspect.signature(lab.CosmosTaskRepository.patch_task)
 ```
 
-The policy groups records by tenant and supplies a default lifetime of
+The policy groups items by tenant and supplies a default lifetime of
 86,400 seconds, or one day. These are configuration values, not a database
 created by the REPL. Follow the expiry test to see how the repository applies
 that policy when its clock advances.
@@ -102,4 +117,4 @@ SigRaft job-orchestration web service; Lab 39 does not import this fake
 repository or gain Cosmos persistence from it.
 Finish with partition, ETag and expiry tests demonstrated and
 `pybootstrap check` exit 0. Exit 1 means findings; exit 2 means a gate could
-not run. Exit Python to discard all modeled records and charges.
+not run. Exit Python to discard all modeled items and charges.

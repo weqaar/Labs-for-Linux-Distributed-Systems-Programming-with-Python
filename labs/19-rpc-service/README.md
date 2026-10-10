@@ -88,7 +88,7 @@ configuration in separate places.
 - `TaskSubmission` and `TaskStatus` use the task fields developed in
   Lab 18; Lab 16's framing is a separate byte-transport exercise.
 - `RelayRpcClient` and the fake RPC service enforce the modeled deadline.
-  The FastAPI routes validate and record `x-relay-budget-ms`, but do not
+  The FastAPI routes validate and store `x-relay-budget-ms`, but do not
   measure elapsed time or enforce an end-to-end deadline. Carrying a budget
   header is not the same as enforcing it.
 - `RelayHttpService` replays the cached answer when a retry carries the same
@@ -125,6 +125,30 @@ existing task with the same ID. The budget parser also accepts `"00"` as zero
 and uses `isdigit()`, which admits some characters that `int()` cannot parse.
 Treat these as limits of the supplied example, not production validation
 guarantees.
+
+## Tests
+
+A unit test checks one function or class on its own, with clocks, network,
+storage and other dependencies replaced by deterministic fakes. A functional
+test checks one complete feature through the lab's public interface, the way
+a reader would use it.
+
+`tests/test_lab_19_rpc_service.py`, `tests/test_concurrency.py` and
+`tests/test_server.py` hold the unit tests. They check the RPC client and
+handler with a fake transport and clock, the blocking-work trap, and the
+server configuration with an injected Uvicorn runner.
+
+`tests/test_api.py` holds the functional tests. They send HTTP requests to the
+FastAPI application through `TestClient` and check the `/tasks` contract end
+to end: submission, reads, missing jobs, required headers, validation errors,
+idempotency keys and size limits.
+
+```bash
+pytest tests/test_lab_19_rpc_service.py tests/test_concurrency.py tests/test_server.py
+pytest tests/test_api.py
+```
+
+`pybootstrap check` runs both kinds of test in its test gate.
 
 ## Python REPL debugging session
 

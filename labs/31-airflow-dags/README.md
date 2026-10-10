@@ -17,7 +17,7 @@ Dataclasses and UTC datetime arithmetic come from the standard library.
 Airflow is not a declared dependency. Keep dependencies in `pyproject.toml`
 if you later implement a separately scoped integration.
 
-A blueprint records what an Airflow adapter would need to create. Backfill
+A blueprint describes what an Airflow adapter would need to create. Backfill
 means requesting past scheduled runs; its cap prevents one request from
 creating an unbounded backlog. A sensor waits for a prerequisite, such as a
 partition snapshot. Marking it deferrable asks a future runtime to release its
@@ -64,6 +64,31 @@ pip install -e ".[dev]"
 ```bash
 pybootstrap check
 ```
+
+## Tests
+
+A unit test checks one function or class on its own, with clocks, network,
+storage and other dependencies replaced by deterministic fakes. A functional
+test checks one complete feature through the lab's public interface, the way
+a reader would use it.
+
+`tests/test_lab_31_airflow_dags.py` holds the unit tests. They check the
+schedule fields, the backfill cap, resource declarations, the blueprint size
+and an import with network calls blocked.
+
+`tests/test_functional.py` holds the functional tests. They drive the public
+composition function `build_relay_dag()` the way an Airflow adapter would.
+They serialize the blueprint to JSON, order its tasks from the sensor to the
+metrics step, request a backfill after a long outage, and check the errors for
+a local-time window and an unknown task.
+
+```bash
+pytest tests/test_lab_31_airflow_dags.py
+pytest tests/test_functional.py
+```
+
+`pybootstrap check` runs both kinds of test in its test gate.
+
 ## Python REPL debugging session
 
 Inspect the import-safe blueprint before requiring Airflow:
@@ -85,7 +110,7 @@ True
 
 The cron expression means 02:00 every day; this blueprint uses UTC. Its six
 tasks consist of the five workflow steps and the extra snapshot sensor.
-`True` records a deferral request, not evidence that a sensor has run.
+`True` marks a deferral request, not proof that a sensor has run.
 Inspect dependencies and callable names before attempting an Airflow adapter.
 
 ## Contribution and completion

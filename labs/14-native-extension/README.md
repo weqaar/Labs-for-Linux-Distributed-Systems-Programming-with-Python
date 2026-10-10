@@ -11,8 +11,8 @@ not an authentication mechanism.
 ## Goal and activities
 
 Establish behavioral equivalence before evaluating performance. You will
-inspect the Python reference and C extension, compare frame digests and record
-which implementation actually ran. A fallback result is not native evidence.
+inspect the Python reference and C extension, compare frame digests and note
+which implementation actually ran. A fallback result is not a result from the native code.
 This shows how to evaluate a C extension before using it to optimize the
 SigRaft job-management web service; Lab 39 does not automatically use this extension.
 
@@ -28,7 +28,7 @@ after installation.
    same frame, not timings from different payloads.
 3. Run `pytest -q tests/test_lab_14_native_extension.py`. Include truncated
    and oversized inputs as well as valid frames.
-4. Use `benchmark_frame_digests` only after equivalence passes. Record its
+4. Use `benchmark_frame_digests` only after equivalence passes. Write down its
    implementation field and environment; do not require a speed-up in tests.
 
 ## Names this lab keeps
@@ -40,7 +40,7 @@ after installation.
 
 This lab keeps the pure-Python implementation as the reference and
 builds a small native extension from `pyproject.toml` alone. The tests assert
-equivalence on a fixed frame corpus and record benchmark measurements without
+equivalence on a fixed frame corpus and take benchmark measurements without
 claiming a speed-up when the native path is unavailable.
 
 ## Getting started
@@ -70,6 +70,21 @@ ruff check src tests
 pyright src tests
 pytest
 ```
+
+## Tests
+
+`tests/test_lab_14_native_extension.py` holds the unit tests. They check the
+header parser, the checksum, the loader fallback and the benchmark one piece
+at a time.
+
+`tests/test_functional.py` holds the functional tests. They drive the public
+package interface the way a caller would: frame job `task-17` in each state,
+describe each frame with the preferred implementation, decode the job again
+and run the benchmark. Results must match the pure-Python reference, and
+truncated or oversized frames must be rejected by both implementations.
+
+Run each kind alone with `pytest tests/test_lab_14_native_extension.py` or
+`pytest tests/test_functional.py`. `pybootstrap check` runs both.
 
 ## Exit codes
 
@@ -113,7 +128,7 @@ Inspect which implementation and extension were loaded:
 
 The example deliberately selects Python, even if the native module is
 available. Its result confirms the decoded length matches the task payload.
-Now compare that result with `prefer_native=True`, recording which module
+Now compare that result with `prefer_native=True`, noting which module
 was actually selected. Matching values establish equivalence for this frame,
 not portability or a speed-up.
 

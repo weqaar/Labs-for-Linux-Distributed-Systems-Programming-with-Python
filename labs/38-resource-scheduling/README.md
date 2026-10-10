@@ -7,7 +7,7 @@ quotas and lease recovery without running the selected job.
 The scheduler accepts requests for CPU cores, memory, GPUs, wall time,
 labels, CPU affinity and NUMA locality. Supplied heartbeats report each
 node's available resources. The configured leader excludes stale or
-incompatible nodes, ranks the rest with stable tie breaking, records a
+incompatible nodes, ranks the rest with stable tie breaking, stores a
 reservation in memory, then returns a dispatch plan for the chosen node.
 
 The dispatch plan gives a node agent the cgroup name, CPU set, memory maximum,
@@ -41,7 +41,7 @@ needed. Install using the setup below before starting the REPL.
 `become_leader` assigns authority in the model; it does not conduct an election.
 `ReplicatedStateLog` is a deterministic stand-in, not a durable or replicated
 log. Returned cgroup, CPU, NUMA and GPU values are enforcement plans, not host
-changes or evidence that a worker executed an action.
+changes or proof that a worker executed an action.
 
 One validation gap remains: an explicit CPU affinity is not checked against
 the node's CPU inventory when no NUMA filter is selected. A request for CPU
@@ -83,8 +83,31 @@ Inspect a placement without touching the host:
 'reserved'
 ```
 
-The final two expressions expose the important ordering: the scheduler records
+The final two expressions expose the important ordering: the scheduler stores
 the reservation before returning the node-specific dispatch plan.
+
+## Tests
+
+The lab has two kinds of test. `tests/test_lab_38_resource_scheduling.py`
+holds the unit tests. They check single rules in isolation, such as request
+validation, admission, priority order, NUMA and GPU placement, quotas, stale
+heartbeats and lease expiry.
+
+`tests/test_functional.py` holds the functional tests. They drive a
+`ResourceScheduler` through its public methods across whole job workflows.
+A job such as `task-17` moves from `queued` through `scheduled` and `running`
+to `succeeded` or `failed`, and a waiting job starts once capacity is
+released. They also check that a duplicate job ID is rejected and that a
+former leader cannot change placement state after failover. Inventories and
+time are supplied values, so the tests never touch the host.
+
+Run each kind alone, or run both with the gate:
+
+```bash
+pytest tests/test_lab_38_resource_scheduling.py
+pytest tests/test_functional.py
+pybootstrap check
+```
 
 ## Run the quality gate
 

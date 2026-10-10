@@ -76,6 +76,31 @@ ruff check src tests
 pyright src tests
 pytest
 ```
+
+## Tests
+
+A unit test checks one function or class on its own, with clocks, network,
+storage and other dependencies replaced by deterministic fakes. A functional
+test checks one complete feature through the lab's public interface, the way
+a reader would use it.
+
+`tests/test_repository.py` holds the unit tests. They check
+`InMemoryTaskRepository` on its own: duplicate creation, ETag changes and
+stale ETags, tenant filtering, missing jobs and an unready repository.
+
+`tests/test_lab_27_stateless_service.py` holds the functional tests. They
+send HTTP requests through `TestClient` to one or two FastAPI applications
+built by `create_app`. They check shared storage across instances,
+conditional `PATCH` with `If-Match`, separate liveness and readiness, and
+draining while a request is still in flight.
+
+```bash
+pytest tests/test_repository.py
+pytest tests/test_lab_27_stateless_service.py
+```
+
+`pybootstrap check` runs both kinds of test in its test gate.
+
 ## Python REPL debugging session
 
 After the editable install, inspect the service and repository interfaces:

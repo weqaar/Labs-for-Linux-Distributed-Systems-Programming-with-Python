@@ -66,7 +66,7 @@ the associated value returned by `delete` belongs to key 3.
 ## Exercise 3 Maintain red-black invariants
 
 Rebuilding repairs the previous tree after insertion. A red-black tree instead
-adjusts its shape during insertion. Colors record balance rules; rotations
+adjusts its shape during insertion. Colors encode the balance rules; rotations
 change links while preserving key order.
 
 Trace insertions that trigger:
@@ -149,6 +149,23 @@ cost rather than hop count, and `pybootstrap check` exits zero.
 These exercises show how to index priorities, preserve job dependencies and
 calculate routes for SigRaft. Lab 39 does not import these tree and graph
 implementations.
+
+## Tests
+
+The lab has two kinds of test. `tests/test_lab_06_trees_and_graphs.py` holds
+the unit tests. They check each structure and algorithm on its own, such as
+tree traversals, red-black invariants, cycle detection and each shortest-path
+method.
+
+`tests/test_functional.py` holds the functional tests. They drive the
+composed `RelayPlan` and `OSPFTopology` classes through their public methods.
+They check that a plan of several jobs runs dependencies first and ranks jobs
+by priority, that a duplicate `task-13` or an unknown dependency leaves the
+plan unchanged, and that a routing table follows the cheapest path and
+reports unknown or unreachable routers.
+
+Run one kind alone with `pytest tests/test_lab_06_trees_and_graphs.py` or
+`pytest tests/test_functional.py`. `pybootstrap check` runs both.
 
 ## Python REPL debugging session
 

@@ -69,6 +69,30 @@ belong in transport headers, not
 URLs or logs. The client rejects cross-origin pagination links and bounds pages
 and systems so a BMC cannot redirect or exhaust the collector.
 
+## Tests
+
+A unit test checks one function or class on its own, with clocks, network,
+storage and other dependencies replaced by deterministic fakes. A functional
+test checks one complete feature through the lab's public interface, the way
+a reader would use it.
+
+`tests/test_lab_37_on_prem_cloud_apis.py` holds the unit tests. They check
+the reconciler with `FakeAdapter`, retry and deadline rules, and each
+OpenStack, Kubernetes, Redfish and Harbor adapter on its own with fakes.
+
+`tests/test_functional.py` holds the functional tests. They compose the
+public `Reconciler` with the real `HarborAdapter` and a stateful fake Harbor
+API behind `httpx.MockTransport`. They run plan, apply and plan again for a
+project, check an update, a lost create reply that must not create a
+duplicate, and a rate limit that stops at the attempt budget.
+
+```bash
+pytest tests/test_lab_37_on_prem_cloud_apis.py
+pytest tests/test_functional.py
+```
+
+`pybootstrap check` runs both kinds of test in its test gate.
+
 ## Python REPL debugging session
 
 The fake makes policy debugging repeatable:
@@ -107,7 +131,7 @@ True
 ```
 
 The first plan creates the missing server in the fake. The second plan says
-`noop` because the owned fields already match; the single recorded write
+`noop` because the owned fields already match; the single write in `fake.put_calls`
 confirms the second comparison did not create a duplicate.
 Inspect `fake.page_calls`, `fake.put_calls` and `fake.resources` when a test
 does not produce the expected plan. Do not print application credentials,

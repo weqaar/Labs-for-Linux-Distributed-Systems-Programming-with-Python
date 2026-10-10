@@ -69,6 +69,21 @@ pyright src tests
 pytest
 ```
 
+## Tests
+
+`tests/test_lab_16_framed_protocol.py` holds the unit tests. They check
+encoding, decoding, the ring buffer and the incremental reader with byte
+fixtures and a fake partial sender.
+
+`tests/test_functional.py` holds the functional tests. They open a real TCP
+connection on 127.0.0.1 with a port chosen by the operating system, send job
+frames with `send_frame` and reassemble them from small `recv` chunks with
+`IncrementalFrameReader`. They also check that a peer closing mid-frame and
+an oversized frame are both reported as errors.
+
+Run each kind alone with `pytest tests/test_lab_16_framed_protocol.py` or
+`pytest tests/test_functional.py`. `pybootstrap check` runs both.
+
 ## Exit codes
 
 | Code | Meaning |

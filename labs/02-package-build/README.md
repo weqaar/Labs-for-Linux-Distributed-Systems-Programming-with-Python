@@ -31,7 +31,7 @@ must be built on Windows. Nuitka and MkDocs are optional comparisons.
 2. Inspect the installed API in the REPL, then build the wheel and sdist.
 3. Build the executable, inspect its format and run its `--version` command.
 4. Generate a fresh project and run its tests, then complete the documentation
-   exercises. Keep build evidence separate from the source checkout.
+   exercises. Keep build outputs separate from the source checkout.
 
 ## Getting started
 
@@ -141,7 +141,7 @@ pytest
 cd ../..
 ```
 
-Copier records the template source and answers in `.copier-answers.yml`. A
+Copier saves the template source and answers in `.copier-answers.yml`. A
 project generated from a versioned template can later use `copier update`, but
 the resulting diff still needs review. The test gate renders a fresh project and
 checks that its package preserves the relay resource and state contract.
@@ -153,6 +153,37 @@ For the optional compiler comparison, return to this lab and build its entry
 point with Nuitka onefile mode. Compare format, architecture, shared libraries,
 size and startup behavior with the PyInstaller artifact. Both outputs remain
 specific to their target operating system and processor architecture.
+
+## Tests
+
+A unit test checks one function or class on its own, with clocks, network,
+storage and other dependencies replaced by deterministic fakes. A functional
+test checks one complete feature through the lab's public interface, the way
+a reader would use it.
+
+`tests/test_lab_02_package_build.py` holds both kinds. Its unit tests check
+`executable_format` and `readelf_headers` against small files in a temporary
+directory, with a fake `readelf` where the tool must fail. Its functional tests
+are `test_cli_reports_the_detected_format`,
+`test_cli_rejects_elf_headers_for_another_format`,
+`test_bundled_command_runs_without_the_source_tree`,
+`test_bundled_command_has_the_native_format` and
+`test_copier_template_generates_the_relay_contract`. They call the `relayctl`
+entry point `main(argv)`, build and run a PyInstaller executable, and render
+the relay template with the `copier` command.
+
+`tests/test_documentation.py` holds functional tests for the documentation.
+They run the Sphinx builders as child processes, and
+`test_generated_site_is_served_on_loopback` fetches the built pages from a
+server on 127.0.0.1.
+
+```bash
+pytest tests/test_lab_02_package_build.py -k "not cli and not bundled and not copier"
+pytest tests/test_lab_02_package_build.py -k "cli or bundled or copier"
+pytest tests/test_documentation.py
+```
+
+`pybootstrap check` runs both kinds of test in its test gate.
 
 ## Python REPL debugging session
 
@@ -236,10 +267,10 @@ Stop its preview with Ctrl-C. This optional comparison is not a required gate.
 `pybootstrap check` must exit 0, including the documentation tests in pytest.
 The HTML and doctest commands above must also exit 0 after your exercises.
 Keep the existing wheel, sdist, template and platform-specific executable
-evidence described above; documentation is an additional release artifact,
+checks described above; documentation is an additional release artifact,
 not a substitute for testing the produced command.
 
 You should be able to explain source distributions, wheels and bundled
 interpreters, and why the latter are platform-specific. Stop preview servers
 with Ctrl-C. Remove only the generated project and build outputs you created
-after retaining evidence; no cloud resources are created.
+after keeping the results you need; no cloud resources are created.

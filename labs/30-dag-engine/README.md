@@ -62,6 +62,22 @@ pip install -e ".[dev]"
 ```bash
 pybootstrap check
 ```
+
+## Tests
+
+`tests/test_lab_30_dag_engine.py` holds the unit tests. They check cycle
+reporting, ready ordering, the parallel limit, failure propagation and retry
+handling on small graphs built for each test.
+
+`tests/test_functional.py` holds the functional tests. They run the workflow
+from `build_relay_workflow()` through `DagEngine.run` and check whole runs:
+every step reaching `succeeded` in dependency order, exhausted retries
+failing the handler step and skipping its dependants, a back edge rejected
+before any attempt, and a retry with no planned next attempt.
+
+Run each kind alone with `pytest tests/test_lab_30_dag_engine.py` or
+`pytest tests/test_functional.py`. `pybootstrap check` runs both.
+
 ## Python REPL debugging session
 
 After the editable install, inspect workflow nodes and edges:

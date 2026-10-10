@@ -1,6 +1,6 @@
 # Lab 35 Operational Data Analysis
 
-This lab compares two releases using recorded task attempts. It checks
+This lab compares two releases using logged task attempts. It checks
 the input rows, calculates duration and failure summaries, and displays the
 results on a local web page. The supplied CSV is synthetic but has the fields
 an operational export would need.
@@ -148,6 +148,28 @@ pyproject.toml  dependencies, tool settings and gate definition
 The analysis functions take a `Path` or a `DataFrame` and never open a
 socket; `service.py` is the only module that knows about HTTP, and it never
 contacts a live telemetry backend.
+
+## Tests
+
+A unit test checks one function or class on its own, with clocks, network,
+storage and other dependencies replaced by deterministic fakes. A functional
+test checks one complete feature through the lab's public interface, the way
+a reader would use it.
+
+`tests/test_schema.py`, `tests/test_analysis.py`, `tests/test_report.py` and
+`tests/test_pipeline.py` hold unit tests for loading, statistics, rendering
+and the pipeline with a fixed clock. `tests/test_service.py` holds both
+kinds. Its handler and argument tests are unit tests. Its `test_live_server_`
+tests are functional tests: they start the analysis web service on 127.0.0.1
+with port 0 and fetch `/` and `/healthz` with a real HTTP client, checking the
+report page, security headers and the 404 for an unknown path.
+
+```bash
+pytest tests -k "not live_server"
+pytest tests -k live_server
+```
+
+`pybootstrap check` runs both kinds of test in its test gate.
 
 ## Python REPL debugging session
 

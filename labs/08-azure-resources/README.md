@@ -74,6 +74,21 @@ ruff check src tests
 pyright src tests
 pytest
 ```
+## Tests
+
+The lab has two kinds of test. `tests/test_lab_08_azure_resources.py` holds
+the unit tests. They check single pieces such as the apply and destroy plan
+labels, the role checks and the command builder in isolation.
+
+`tests/test_functional.py` holds the functional tests. They use the public
+package interface the way a deployer would: plan an environment, apply it to
+the in-memory state, check worker and deployer access, repair drift and tear
+it down. They also load the checked-in Bicep tree and confirm that a copy with
+an embedded storage key or a missing environment file is rejected.
+
+Run each kind alone with `pytest tests/test_lab_08_azure_resources.py` or
+`pytest tests/test_functional.py`. `pybootstrap check` runs both.
+
 ## Python REPL debugging session
 
 Inspect the offline resource model before running an Azure command:

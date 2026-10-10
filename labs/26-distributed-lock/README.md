@@ -54,6 +54,21 @@ pyright src tests
 pytest
 ```
 
+## Tests
+
+`tests/test_lab_26_distributed_lock.py` holds the unit tests. They check
+single pieces such as the Redis command model, the release paths, the fenced
+store and the scheduler ledger, each with the manual clock.
+
+`tests/test_functional.py` holds the functional tests. They drive the
+composed simulation through the package's public classes: competing workers
+take turns on the lock for `task-17`, a paused worker is fenced out while the
+current owner moves the job to `succeeded`, and a scheduler cluster runs each
+interval once across a restart.
+
+Run each kind alone with `pytest tests/test_lab_26_distributed_lock.py` or
+`pytest tests/test_functional.py`. `pybootstrap check` runs both.
+
 ## Exit codes
 
 | Code | Meaning |
@@ -85,7 +100,7 @@ It then models three coordination mechanisms with an in-memory clock:
 
 Tests reproduce the client-command race and naive `DEL` bug, show the paused-holder
 corruption on an unfenced store, reject the same stale writer with fencing, and
-record one schedule per interval while that ledger is retained, without live
+store one schedule per interval while that ledger is retained, without live
 Redis or Azure. This is not an exactly-once guarantee for external job effects.
 
 Use destination fencing when a resumed old holder could corrupt state.

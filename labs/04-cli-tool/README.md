@@ -23,7 +23,7 @@ Use a separate environment because Lab 02 also installs a command named
 1. Install, inspect `settings.py`, and run the help and config commands below.
 2. Inspect the retry policy in the REPL. Run
    `pytest -q tests/test_lab_04_cli_tool.py` and trace the injected timeout,
-   503 response and success. The recorded delays must be 0.25 and 0.5 seconds;
+   503 response and success. The delays the test captures must be 0.25 and 0.5 seconds;
    the test does not actually sleep.
 3. Change a response in a local test to 404 and verify exit 1, then to invalid
    JSON and verify a command error. Do not add retries to writes without an
@@ -106,6 +106,29 @@ time. This client does not interpret `Retry-After` or expose a public close
 method. Those are additional requirements for a long-lived client, not
 features demonstrated by this command.
 
+## Tests
+
+A unit test checks one function or class on its own, with clocks, network,
+storage and other dependencies replaced by deterministic fakes. A functional
+test checks one complete feature through the lab's public interface, the way
+a reader would use it.
+
+`tests/test_lab_04_cli_tool.py` holds both kinds. The unit tests are
+`test_settings_follow_documented_precedence` and
+`test_retry_policy_rejects_invalid_bounds`. They call `resolve_settings` and
+`RetryPolicy` directly. Every other test in the module is a functional test.
+Each one invokes the `relayctl` Typer app with `CliRunner` and checks the exit
+code, stdout and stderr. Behind the command, the real `RelayClient` talks to
+`httpx.MockTransport`, so the tests cover status output, a missing job, a
+missing token, retries after a timeout and a 503, and malformed replies.
+
+```bash
+pytest tests/test_lab_04_cli_tool.py -k "precedence or retry_policy"
+pytest tests/test_lab_04_cli_tool.py -k "not precedence and not retry_policy"
+```
+
+`pybootstrap check` runs both kinds of test in its test gate.
+
 ## Python REPL debugging session
 
 After the editable install, inspect the package actually loaded by Python:
@@ -124,7 +147,7 @@ After the editable install, inspect the package actually loaded by Python:
 >>> inspect.signature(policy.delay)
 ```
 
-The policy object records retry limits; constructing it sends no request.
+The policy object stores retry limits; constructing it sends no request.
 Follow `RelayClient.task` and the `status` callback to see where those limits
 are used and where the result becomes command output.
 

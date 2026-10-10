@@ -64,6 +64,22 @@ pytest
 Fix findings reported by exit 1. For exit 2, repair the tool or its
 configuration and rerun it; an unavailable check cannot establish a pass.
 
+## Tests
+
+The lab has two kinds of test. `tests/test_lab_17_wire_format.py` holds the
+unit tests. They check each codec function, schema field number and size limit
+on its own.
+
+`tests/test_functional.py` holds the functional tests. They drive the public
+codec functions `decode_v1`, `decode_v2` and `decode_owner_patch` the way two
+relay processes on different schema versions would. They check that a job
+message keeps its owner and priority through an old reader, that a sequence of
+owner patches sets, keeps and clears the owner, and that bad, oversized or
+corrupt messages are rejected.
+
+Run each kind alone with `pytest tests/test_lab_17_wire_format.py` or
+`pytest tests/test_functional.py`. `pybootstrap check` runs both.
+
 ## Layout
 
 ```

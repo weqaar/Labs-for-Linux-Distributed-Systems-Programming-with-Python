@@ -152,13 +152,18 @@ class AppendEntriesResponse:
 
 @dataclass(frozen=True)
 class CommandResult:
-    """Result of submitting one relay command to the leader."""
+    """Result of submitting one relay command to the leader.
+
+    ``rejection`` holds the state machine's domain rejection, such as a duplicate
+    task identifier, when the committed command was refused on apply.
+    """
 
     leader_id: NodeId
     index: int
     term: int
     committed: bool
     replicated_to: tuple[NodeId, ...]
+    rejection: str | None = None
 
 
 @dataclass(frozen=True)
@@ -279,6 +284,7 @@ class ReplicatedLogNode:
     state_machine: RelayTaskStateMachine = field(init=False)
     last_applied: int = field(init=False, default=0)
     match_index_by_peer: dict[NodeId, int] = field(default_factory=dict)
+    _rejections: dict[int, str] = field(init=False, default_factory=dict)
 
     def __post_init__(self) -> None:
         self.state_machine = RelayTaskStateMachine()
@@ -398,11 +404,25 @@ class ReplicatedLogNode:
     def apply_committed_entries(self) -> None:
         while self.last_applied < self.commit_index:
             entry = self.persistent_state.log[self.last_applied]
-            self.state_machine.apply(entry.command)
+            try:
+                self.state_machine.apply(entry.command)
+            except StateMachineError as rejection:
+                # A domain rejection is deterministic, so every replica reaches the
+                # same result for this index and the log keeps moving.
+                self._rejections[entry.index] = str(rejection)
             self.last_applied += 1
+
+    def rejection_for(self, index: int) -> str | None:
+        """Return the domain rejection reached when applying *index*, if any.
+
+        Returns ``None`` for an entry that applied cleanly or has not been applied.
+        """
+
+        return self._rejections.get(index)
 
     def rebuild_state_machine(self) -> None:
         self.state_machine = RelayTaskStateMachine()
+        self._rejections = {}
         self.last_applied = 0
         self.persistent_state.commit_index = min(
             self.persistent_state.commit_index,
@@ -504,6 +524,7 @@ class ReplicatedRelayCluster:
             term=entry.term,
             committed=entry.index <= leader.commit_index,
             replicated_to=tuple(sorted(replicated_to)),
+            rejection=leader.rejection_for(entry.index),
         )
 
     def replicate_from_leader(self, leader_id: NodeId) -> tuple[AppendEntriesResponse, ...]:

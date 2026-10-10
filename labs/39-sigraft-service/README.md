@@ -1,25 +1,34 @@
 # Lab 39 SigRaft Service
 
-This final lab applies the designs from the earlier labs to the
-SigRaft job-management web service. Those labs import their packages as
-`relay`. That name does not mean the program relays traffic. Lab 39 uses
-`sigraftctl` instead. It includes a runnable REST API, the `sigraftctl`
-client, a GraphQL endpoint, resource-aware job placement, release artifacts
-that describe promotion of the same digest through staging and production, OpenTelemetry
-evidence, both Azure and on-prem cloud targets, and offline checks for rollback,
-agent convergence and post-deploy verification.
-The runnable service uses OpenTelemetry SDK traces, metrics and correlated
-logs, plus validated transactional TOML hot reload.
-It also offers an optional authenticated WebSocket listener and a tested,
-versioned Sphinx documentation site. HTTP remains the default CLI transport.
+## Goal and purpose
 
-Release evidence also retains the earlier FastAPI/Uvicorn/optional-uvloop
-adapter design and the bounded Ray compute lab. The compact final HTTP process
-remains deliberately small. Those entries list capabilities to check in the
-independently runnable labs; the checked-in JSON is not a fresh gate result.
-Lab 39 neither replaces its HTTP server with FastAPI nor starts a Ray cluster.
+This final lab integrates the architectural patterns from earlier chapters into
+the runnable SigRaft job-orchestration web service and its operator CLI
+(`sigraftctl`).
 
-## Goal and preparation
+The lab demonstrates the complete production lifecycle of the service:
+1. **Multi-protocol service APIs:** SigRaft exposes unified task management over
+   HTTP REST (`/tasks`), GraphQL query and mutation endpoints, and real-time
+   authenticated WebSocket streams.
+2. **Resource scheduling and placement:** Allocating jobs across nodes based on
+   CPU, memory, and hardware accelerator constraints while preventing
+   oversubscription.
+3. **Telemetry and observability:** End-to-end OpenTelemetry instrumentation
+   exporting structured spans, Prometheus metrics, and correlated logs.
+4. **Configuration hot-reloading:** Safe, transactional TOML configuration
+   updates without process restarts or inconsistent states.
+5. **Release verification:** Offline verification of release evidence, canary
+   promotion manifests, and post-deployment validation reports.
+
+## Learning outcomes
+
+By completing this lab, you will understand:
+- How to structure a production-grade Python web service supporting multiple API protocols.
+- How to implement transactional configuration reload without downtime.
+- How to connect OpenTelemetry traces, metrics, and logs across distributed service requests.
+- How to verify build, container, and deployment evidence before promoting software to production.
+
+## Prerequisites and setup
 
 Operate the supplied compact SigRaft job-orchestration web service and connect
 its responses to release checks. You will submit and read a job,
@@ -57,7 +66,7 @@ the HTTP scope header in the examples is not authenticated identity.
 3. Run `pytest -q tests/test_lab_39_sigraft_service.py tests/test_config.py`.
    Compare transport results, scheduler plans and transactional reload failure.
 4. Build documentation and run its exercises. Optional WebSocket, telemetry
-   backends and platform deployment each require their own setup and evidence.
+   backends and platform deployment each require their own setup and test results.
 
 ## Run the compact SigRaft service
 
@@ -176,7 +185,7 @@ The final service implements a separate version of Lab 38's placement model thro
 `/scheduler/jobs/{task_id}`. Nodes report CPU, memory, GPU, label and NUMA
 inventory. The configured leader identity gates placement; no election runs.
 The scheduler validates requests, excludes stale nodes,
-makes deterministic placements, records an allocation and returns a
+makes deterministic placements, stores an allocation and returns a
 node-specific dispatch plan containing cgroup, CPU, memory, NUMA and GPU
 enforcement values. These are returned data, not actual cgroup enforcement or
 a broker publish. A future queue adapter would carry that decision to the
@@ -187,6 +196,37 @@ unless the NUMA filter removes the unknown CPU. The current implementation
 can return CPU 99 for a node reporting only CPUs 0 and 1. This is a validation
 gap, not a supported placement. Scheduler states such as `scheduled` and
 `cancelled` are distinct from the four states exposed for `/tasks`.
+
+## Tests
+
+A unit test checks one function or class on its own, with clocks, network,
+storage and other dependencies replaced by deterministic fakes. A functional
+test checks one complete feature through the lab's public interface, the way
+a reader would use it.
+
+Several modules mix both kinds. The unit tests check configuration reload,
+analytics, telemetry setup, job events, release artifacts, documentation
+release steps and the observation probe with deterministic fakes.
+
+The functional tests start the SigRaft service with `run_server` or
+`run_websocket_server` on 127.0.0.1 with port 0, or run the `sigraftctl`
+entry point `main(argv)`. In `tests/test_lab_39_sigraft_service.py` they are
+`test_sigraft_service_and_client_contract_work_end_to_end`, the
+`test_graphql_` tests, the `test_resource_scheduler_` tests,
+`test_read_only_redfish_service_exposes_bounded_system_inventory` and the
+`test_invalid_` tests. In `tests/test_websocket_transport.py` they are the
+tests using the `hosted` fixture and the two `test_cli_` tests. The others
+are `test_body_limit_changes_live_without_restarting_http`,
+`test_integrated_analysis_route_has_safe_headers`, the HTTP tests in
+`tests/test_telemetry.py` and `test_docs_can_be_served_locally`.
+
+```bash
+pytest tests/test_lab_39_sigraft_service.py -k "end_to_end or graphql or resource_scheduler or redfish_service or invalid"
+pytest tests/test_websocket_transport.py tests/test_telemetry.py
+pytest tests/test_config.py tests/test_analytics_service.py
+```
+
+`pybootstrap check` runs both kinds of test in its test gate.
 
 ## Python REPL debugging session
 
@@ -245,7 +285,7 @@ pipeline-neutral plan for Harbor and the on-prem Kubernetes contexts.
 
 The service creates real `TracerProvider`, `MeterProvider`, and
 `LoggerProvider` instances. Every non-health HTTP request receives a server
-span. The handler extracts an inbound W3C `traceparent`, records bounded route,
+span. The handler extracts an inbound W3C `traceparent`, sets bounded route,
 method, and status dimensions on its counter and histogram, and emits an SDK
 log record while the server span is current. The log exporter therefore
 receives the same trace and span IDs without copied correlation fields.
@@ -285,7 +325,7 @@ offline. Set `analysis.observations_path` to a bounded CSV exported from the
 telemetry ingestion path for a real deployment. The fixed schema rejects extra
 columns, unsafe dimensions, malformed timestamps, and non-finite numbers.
 
-As in Lab 35, use the report to describe the recorded sample, not to infer
+As in Lab 35, use the report to describe the collected sample, not to infer
 that a release caused every observed difference. The report shows per-release count, failure rate, mean, median, p95, p99, and
 sample standard deviation. It also shows a t interval for the overall mean, a
 Mann-Whitney comparison with rank-biserial effect size, an OLS model, and a
@@ -309,7 +349,7 @@ and outcomes meant the same thing.
 
 The release-analysis command validates and reports a caller-supplied candidate
 digest; it does not establish which image produced the observations. A real
-promotion decision needs separate evidence linking the dataset to that image.
+promotion decision needs separate proof linking the dataset to that image.
 
 ## Read-only Redfish inventory
 
@@ -412,7 +452,7 @@ closing all three telemetry providers.
   previous digest on failure.
 - `artifacts/self_hosted_agents.yml` converges self-hosted agents without shell
   tasks.
-- `artifacts/release-evidence.json` records the commit, the passing quality
+- `artifacts/release-evidence.json` lists the commit, the passing quality
   gates, the Copier and executable build contracts, task-time semantics,
   object interfaces, tree and graph invariants, performance diagnostics,
   Python execution, multicore and NUMA contracts, typed query and CPython
@@ -421,13 +461,13 @@ closing all three telemetry providers.
   Celery and Valkey delivery, ZeroMQ,
   WebSocket and GraphQL APIs, Bicep and AKS infrastructure, Nginx,
   autoscaling, disruption budgets, progressive delivery and the promoted
-  digests. It also records OpenTelemetry export, the OpenStack/Kubernetes
+  digests. It also lists OpenTelemetry export, the OpenStack/Kubernetes
   on-prem cloud contracts, operational analysis, and transactional
   configuration reload.
 - `src/lab_39_sigraft_service/fabric_executor.py` verifies deployed hosts and
   fails the stage when any host is wrong.
 
-These files are examples to validate and adapt, not records of a completed
+These files are examples to validate and adapt, not proof of a completed
 deployment. The self-hosted-agent playbook declares a service that runs
 `sigraft_agent`, but does not install that module. Supply and verify the agent
 before starting the declared service. The release JSON's commit and digests
@@ -447,10 +487,10 @@ must be replaced with values from the actual build and its gate results.
 | 08 | `08-azure-resources` | Defines Bicep modules for storage, ACR, AKS, monitoring, identity and RBAC. |
 | 09 | `09-azure-sdk` | Moves cloud access onto SDK calls and managed credentials. |
 | 10 | `10-python-execution` | Connects source, AST, RISC-V ADD, bytecode, VM, and host architecture. |
-| 11 | `11-worker-pool` | Adds bounded workers, IPC queues, shared memory, multicore and NUMA evidence. |
+| 11 | `11-worker-pool` | Adds bounded workers, IPC queues, shared memory, multicore and NUMA measurements. |
 | 12 | `12-echo-service` | Compares TCP streams with UDP datagrams and traces both through Ethernet and IPv4. |
 | 13 | `13-packet-tools` | Adds packet inspection helpers for wire debugging. |
-| 14 | `14-native-extension` | Compares Python and native framing behavior and records measurements. |
+| 14 | `14-native-extension` | Compares Python and native framing behavior and takes measurements. |
 | 15 | `15-cpython-bytecode` | Adds typed task queries and a tested custom interpreter instruction. |
 | 16 | `16-framed-protocol` | Frames traffic through a bounded ring buffer. |
 | 17 | `17-wire-format` | Defines versioned serialization for relay messages. |
@@ -489,7 +529,7 @@ pybootstrap check
 
 Finish when you can distinguish accepted jobs from executed jobs, interface
 results from scheduler plans, local telemetry emission from backend ingestion,
-and artifact checks from deployed release evidence. `pybootstrap check`
+and artifact checks from results gathered on a deployed release. `pybootstrap check`
 must exit 0 with all configured gates run. Exit 1 means findings; exit 2
 means a gate could not run and supplied no verdict.
 
@@ -499,4 +539,4 @@ services to join managed threads and flush providers. Remove
 If you started the shared stack, run `make local-down` from the repository
 root; remove volumes only if you intentionally want to discard their data.
 Clean up optional cloud resources with their owned deployment's teardown
-procedure. Do not publish the example digest or credentials as release evidence.
+procedure. Do not publish the example digest or credentials in a release report.

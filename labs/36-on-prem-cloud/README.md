@@ -86,13 +86,38 @@ copying a profile.
 
 Execution accepts only `ansible-galaxy`, `ansible-playbook`, `kubectl` and `openstack`.
 Arguments are arrays and never pass through a shell. The runner is injected,
-so tests record intended calls without changing the host.
+so tests capture intended calls without changing the host.
 
 The deployment configuration pins Kolla Ansible 19.5.0 for OpenStack 2024.2,
 Kubespray v2.27.0 for Kubernetes v1.31.4, Ansible collections, and every Helm
 chart. Ansible creates the libvirt disks, cloud-init media, networks, and
 domains before calling those installers. See `../../onprem/README.md` for
 operator inputs, bootstrap commands, validation, and bounded teardown.
+
+## Tests
+
+A unit test checks one function or class on its own, with clocks, network,
+storage and other dependencies replaced by deterministic fakes. A functional
+test checks one complete feature through the lab's public interface, the way
+a reader would use it.
+
+`tests/test_lab_36_on_prem_cloud.py` holds both kinds. The unit tests check
+configuration loading, resource totals, plan order, rejected configurations,
+artifacts and secrets. The functional tests are
+`test_command_line_defaults_to_a_read_only_plan`,
+`test_apply_requires_two_explicit_opt_ins` and
+`test_destroy_requires_exact_confirmation_and_is_ordered`. The first calls
+`main()` from `lab_36_on_prem_cloud.__main__` with a command line and reads
+the printed plan. The other two drive the public `apply` and `destroy`
+lifecycle with a fake command runner that keeps each call, so no command
+touches the host.
+
+```bash
+pytest tests -k "not (command_line or apply_requires or destroy_requires)"
+pytest tests -k "command_line or apply_requires or destroy_requires"
+```
+
+`pybootstrap check` runs both kinds of test in its test gate.
 
 ## Python REPL debugging session
 

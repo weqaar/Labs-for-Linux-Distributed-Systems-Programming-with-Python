@@ -45,7 +45,7 @@ external cluster; the Valkey worker is optional.
 3. Run `pytest -q tests/test_compute_pool.py` separately to observe real
    Ray workers, bounded submissions, conflicts and cleanup.
 4. Only after these checks, try the optional live worker or pool below.
-   Record whether each test used a model, a socket, a broker or a Ray worker.
+   Note whether each test used a model, a socket, a broker or a Ray worker.
 
 ## Getting started
 
@@ -153,7 +153,7 @@ rather than letting the task queue forever. `shutdown()` releases the
 cluster it owns even if draining outstanding work raises.
 
 The ledger is process memory, not durable storage. Actor restart or eviction
-can remove recorded outcomes and allow a later submission to run again.
+can remove stored outcomes and allow a later submission to run again.
 The example actions demonstrate execution policy;
 they are not implementations of a real blob indexing service.
 
@@ -171,11 +171,28 @@ ruff check src tests
 pyright src tests
 pytest
 ```
+
+## Tests
+
+The lab has two kinds of test. `tests/test_lab_20_zeromq_patterns.py` and
+`tests/test_compute_pool.py` hold the unit tests. They check each messaging
+model, the Celery delivery policy and the Ray compute pool on their own.
+
+`tests/test_functional.py` holds the functional tests. They drive the public
+pipeline, publisher, DEALER client, real `inproc` ZeroMQ round trip and eager
+Celery submission the way a relay deployment would. They check that a
+watcher sees a job move from `queued` through `running` to `succeeded` or
+`failed`, that a lost command reply is recovered without a second effect, and
+that a bad acknowledgement, empty topic or malformed job ID is refused.
+
+Run each kind alone with `pytest tests/test_lab_20_zeromq_patterns.py
+tests/test_compute_pool.py` or `pytest tests/test_functional.py`.
+`pybootstrap check` runs both.
 ## Contribution and completion
 
 These independent experiments inform delivery and execution choices for the
 SigRaft job-orchestration web service. Lab 39 lists these capabilities in its
-release records but does not start a Celery worker or Ray cluster.
+release report but does not start a Celery worker or Ray cluster.
 Finish when you can distinguish at-least-once delivery from in-memory
 deduplication and show queue limits and cleanup. `pybootstrap check` must
 exit 0; exit 1 means findings and exit 2 means a gate could not run.

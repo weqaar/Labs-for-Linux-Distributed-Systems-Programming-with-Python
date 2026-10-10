@@ -29,7 +29,7 @@ pybootstrap check
 
 ## Exercise 1 Python debugging and inspection
 
-The supplied debug target reads a retry count from a record. One record is
+The supplied debug target reads a retry count from a dictionary. One dictionary is
 valid; the other converts to an integer that violates the retry rule. Run the
 valid path, then reproduce that failure:
 
@@ -161,7 +161,7 @@ loop counts, dates, interpreter, platform, and other metadata.
 
 Do not put a nanosecond threshold in `pytest`. The deterministic suite verifies
 that both implementations return the same result. `pyperf` collects
-performance evidence in an environment chosen for that purpose.
+benchmark measurements in an environment chosen for that purpose.
 
 ## Exercise 5 GDB and core analysis
 
@@ -231,7 +231,7 @@ perf record -g --call-graph dwarf -- \
 perf report
 ```
 
-Record any `perf_event_paranoid`, container, virtualization, symbol, or stack
+Write down any `perf_event_paranoid`, container, virtualization, symbol, or stack
 unwinding limitation with the result.
 
 ## Exercise 8 ftrace
@@ -261,6 +261,24 @@ command has a stated question and scope, the saved profile identifies the
 expected relay workload, the benchmark files retain their metadata and raw
 values, and the final product result is unchanged.
 
+## Tests
+
+The lab has two kinds of test. `tests/test_lab_07_performance_diagnostics.py`
+holds the unit tests. They check each helper on its own with controlled
+inputs, such as the timing functions with a fake clock, the profile readers,
+the inspection helpers and the diagnostic command plans.
+
+`tests/test_functional.py` holds the functional tests. They drive the
+`debug_target` and `probe` command-line entry points the way
+`python -m lab_07_performance_diagnostics.probe` runs them, and they follow a
+saved CPU profile back to the `cpu_work` row. They check the printed output,
+the marker file and the errors a reader meets for an invalid retry count or
+bad arguments.
+
+Run one kind alone with
+`pytest tests/test_lab_07_performance_diagnostics.py` or
+`pytest tests/test_functional.py`. `pybootstrap check` runs both.
+
 ## Contribution and cleanup
 
 The SigRaft job-management web service needs measurements of latency and
@@ -272,5 +290,5 @@ findings; exit 2 means a gate could not run. A performance result is not a
 quality-gate threshold or a promise about another machine.
 
 Quit debuggers and profilers, let bounded probes exit, and stop tracing.
-Retain selected benchmark/profile evidence; delete only exercise outputs you
+Keep selected benchmark results and profiles; delete only exercise outputs you
 created, including the marker and native probe. No Azure resource is required.

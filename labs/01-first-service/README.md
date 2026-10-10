@@ -95,6 +95,21 @@ pytest -q tests/test_lab_01_first_service.py
 pybootstrap check
 ```
 
+## Tests
+
+The lab has two kinds of test. `tests/test_lab_01_first_service.py` holds
+the unit tests. They check single operations of `InMemoryRelayService` in
+isolation, such as validation, one state change or one domain error.
+
+`tests/test_functional.py` holds the functional tests. They drive the public
+`InMemoryRelayService` API and `render_relayctl_status` through whole job
+lifecycles. They check that a job moves from `queued` through `running` to
+`succeeded` or `failed`, and that a duplicate `task-17` or an early completion
+is rejected without changing the stored status.
+
+Run one kind alone with `pytest tests/test_lab_01_first_service.py` or
+`pytest tests/test_functional.py`. `pybootstrap check` runs both.
+
 ## Contribution and completion
 
 SigRaft uses the same job identifiers, actions, resource paths and

@@ -1,9 +1,9 @@
 # Lab 34 Instrumented Service
 
-This lab records what happens while SigRaft handles a request. Its Python
+This lab captures what happens while SigRaft handles a request. Its Python
 import name is `relay`; the program does not relay traffic.
 OpenTelemetry traces connect timed operations called spans, metrics count
-requests and measure duration, and logs record individual events. Shared
+requests and measure duration, and logs describe individual events. Shared
 trace identifiers let you find the logs belonging to one request.
 
 The implementation uses real OpenTelemetry SDK providers with in-memory
@@ -28,7 +28,7 @@ OpenTelemetry API, SDK and OTLP gRPC exporters are declared in
    server span, client child, correlated log and metric attributes in the
    request test.
 3. Compare a sampled request with an unsampled inbound parent. Metrics must
-   still record the request; dropped traces do not mean missing traffic.
+   still count the request; dropped traces do not mean missing traffic.
 4. Change a fake dependency outcome and inspect error status without exporting
    sensitive request or exception data.
 
@@ -58,7 +58,7 @@ pip install -e ".[azure]"
 3. starts a child `SpanKind.CLIENT` span for `relay.storage`;
 4. injects the client context into the dependency request;
 5. adds one `relay.requests` counter measurement;
-6. records milliseconds in the `relay.request.duration` histogram; and
+6. adds the duration in milliseconds to the `relay.request.duration` histogram; and
 7. emits an SDK log record correlated with the server trace and span IDs.
 
 The manual clock controls the measured duration. `SequentialIdSource` is an
@@ -68,7 +68,7 @@ real SDK spans. The resource supplies `service.name`, `service.version`, and
 
 Use `TelemetryRuntime.in_memory(sample_ratio=1.0)` for deterministic tests.
 The sampler is parent based. An unsampled inbound parent remains unsampled,
-while metrics are still recorded. A ratio of `0.1` samples about one tenth of
+while metrics are still collected. A ratio of `0.1` samples about one tenth of
 new root traces. Use traces to inspect sampled requests and metrics to count requests whether
 or not their traces were sampled.
 
@@ -177,7 +177,7 @@ dependencies. Their trace ID maps to the operation ID. The saved
 workspace. It removes health traffic, joins `AppRequests` to
 `AppDependencies`, and groups failures by dependency target. Start from an
 alert window, select one operation ID, then inspect the ordered request and
-dependency records.
+dependency rows.
 
 ## Context across execution boundaries
 
@@ -199,7 +199,7 @@ tests run in one event loop and production uses a thread pool or broker.
 
 ## Security and cardinality
 
-Treat telemetry as exported data. Do not record request bodies, authorization
+Treat telemetry as exported data. Do not store request bodies, authorization
 headers, cookies, access tokens, connection strings, or unrestricted exception
 text. Allowlist baggage keys at trust boundaries. An external caller can
 otherwise increase storage cost or place private values in a wider analysis
@@ -207,8 +207,8 @@ system.
 
 Metric attributes must have bounded value sets. Route templates, outcomes, and
 dependency names are suitable. Task IDs, tenant IDs, full URLs, user text, and
-random values create a new time series for each value. Relay therefore records
-only route, outcome, and dependency on its counter and histogram. The tenant
+random values create a new time series for each value. Relay therefore sets
+only route, outcome, and dependency attributes on its counter and histogram. The tenant
 remains on the selected request span for trace lookup, but not on metrics or
 logs. Deployments with sensitive tenant names should replace it with a
 controlled classification or omit it.
@@ -223,6 +223,30 @@ health routes, provider shutdown, exporter settings, and the Log Analytics
 query's required clauses. These checks inspect emitted values and trace parent
 relationships. Send a synthetic request in staging and locate its trace, metrics
 and logs in the chosen backends to verify ingestion.
+
+## Tests
+
+The lab has two kinds of test. `tests/test_lab_34_instrumented_service.py`
+holds the unit tests. They check single helpers and settings in isolation,
+such as `traceparent` parsing, the sampler, baggage limits, exporter settings
+and the KQL query checks.
+
+`tests/test_functional.py` holds the functional tests. They build an
+`InstrumentedRelayService` on `TelemetryRuntime.in_memory()` and send whole
+`POST /tasks` requests through `handle_request`. They then check that each
+request produces a correlated trace, metric and log, that a dependency
+timeout returns 502 and marks every signal as failed, that job IDs such as
+`task-17` stay out of metric labels, and that message context continues the
+producer's trace. All telemetry goes to in-memory exporters, so no collector
+is needed.
+
+Run each kind alone, or run both with the gate:
+
+```bash
+pytest tests/test_lab_34_instrumented_service.py
+pytest tests/test_functional.py
+pybootstrap check
+```
 
 ## Contribution and completion
 

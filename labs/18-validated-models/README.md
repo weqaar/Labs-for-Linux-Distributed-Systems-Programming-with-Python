@@ -58,6 +58,22 @@ pyright src tests
 pytest
 ```
 
+## Tests
+
+The lab has two kinds of test. `tests/test_lab_18_validated_models.py` holds
+the unit tests. They check each model, validator, settings loader and error
+builder on its own.
+
+`tests/test_functional.py` holds the functional tests. They drive the public
+package the way a `/tasks` HTTP adapter would, passing raw JSON bodies through
+the boundary models into `RelayTaskService`. They check that a job moves from
+`queued` through `running` to `succeeded` or `failed`, that a rejected body
+gets a 422 response and creates no job, and that a rejected transition leaves
+the job status unchanged.
+
+Run each kind alone with `pytest tests/test_lab_18_validated_models.py` or
+`pytest tests/test_functional.py`. `pybootstrap check` runs both.
+
 ## Validate before using a value
 
 Decoding JSON tells you which values arrived, not whether they are acceptable.

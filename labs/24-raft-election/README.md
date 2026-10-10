@@ -77,9 +77,27 @@ fires next. They cover:
 - higher-term step-down
 - minority partitions failing to elect a leader
 
-The restart reuses a Python `PersistentVoteState`; it does not fsync a disk
-record or survive loss of the Python process. No claim about a managed Azure
+The restart reuses a Python `PersistentVoteState`; it does not fsync its state to
+disk or survive loss of the Python process. No claim about a managed Azure
 service's internal consensus implementation follows from this simulation.
+
+## Tests
+
+`tests/test_lab_24_raft_election.py` holds the unit tests. They check single
+election rules such as one vote per term, split votes, higher-term step-down
+and minority partitions.
+
+`tests/test_functional.py` holds the functional tests. They drive a whole
+`DeterministicRaftCluster` through its public methods, firing chosen timeouts,
+sending heartbeats and partitioning the scripted network. They check that the
+cluster elects a leader, loses it to a partition, elects a replacement in a
+later term and makes the old leader step down after healing. They also check
+that a three-way split elects nobody and that a heartbeat from a node that is
+not leader is refused.
+
+Run `pytest tests/test_lab_24_raft_election.py` for the unit tests alone and
+`pytest tests/test_functional.py` for the functional tests alone.
+`pybootstrap check` runs both.
 
 ## Layout
 
@@ -115,7 +133,7 @@ test next to see the same timeout fail when a majority cannot be reached.
 
 These elections show why a SigRaft job-orchestration web service needs a
 majority before choosing a coordinator. Lab 39 does not import this cluster
-or run consensus merely by listing it in release records.
+or run consensus merely by listing it in its release report.
 Finish with demonstrated split-vote recovery and higher-term step-down, and
 `pybootstrap check` exit 0. Exit Python to discard the simulated nodes; no
 network or Azure resources were created.

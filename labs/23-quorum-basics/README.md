@@ -82,6 +82,23 @@ network partitions. Tests demonstrate:
 No live Azure hosts, sockets or sleeps are required. Every scenario is driven by
 deterministic test input.
 
+## Tests
+
+`tests/test_lab_23_quorum_basics.py` holds the unit tests. They check quorum
+arithmetic and single read and write scenarios, including a stale read from
+disjoint quorums and an unknown job.
+
+`tests/test_functional.py` holds the functional tests. They drive a five-node
+`QuorumRegisterCluster` through its public methods and follow the status of
+`task-17` from `queued` to `running` to `completed`. They check that every
+majority read returns the latest write, that a minority partition refuses a
+write while the majority continues, that healing the partition restores the
+latest read, and that reading a job never written is rejected.
+
+Run `pytest tests/test_lab_23_quorum_basics.py` for the unit tests alone and
+`pytest tests/test_functional.py` for the functional tests alone.
+`pybootstrap check` runs both.
+
 ## Layout
 
 ```

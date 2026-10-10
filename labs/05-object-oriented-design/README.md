@@ -63,6 +63,23 @@ calls, and the in-memory adapter implements them. This independent package is
 not imported by Lab 39. A production storage adapter would implement those
 methods without moving SDK-specific code into task objects.
 
+## Tests
+
+The lab has two kinds of test. `tests/test_lab_05_object_oriented_design.py`
+holds the unit tests. They check single objects in isolation, such as the
+`Task` value, the descriptor, the decorator, the handler registry and the
+repository adapter.
+
+`tests/test_functional.py` holds the functional tests. They drive the service
+returned by `build_default_service` through `submit`, `run`,
+`counts_by_state` and `audit_events`. They check that jobs reach `succeeded`
+through the registered handlers, that a duplicate `task-17` or an unknown job
+is rejected, and that a handler exception reaches the caller and leaves the
+job `running`.
+
+Run one kind alone with `pytest tests/test_lab_05_object_oriented_design.py`
+or `pytest tests/test_functional.py`. `pybootstrap check` runs both.
+
 ## Python REPL debugging session
 
 ```pycon

@@ -10,7 +10,7 @@ Use Python 3.10 or later here and read
 The standard library supplies the simulation; dependencies are declared in
 `pyproject.toml`. No external network or Azure subscription is needed.
 
-The log records commands in order. Committing marks which commands are agreed
+The log stores commands in order. Committing marks which commands are agreed
 for use; applying runs those commands against the job status. The code
 calls that status the task state. The state
 machine is the code that performs those ordered state changes. Keeping these
@@ -83,6 +83,31 @@ no disk persistence, real network replication or crash-recovery storage test.
 The state machine's terminal enum is `RelayTaskStatus.COMPLETED`, a name used
 only inside this simulation, not the service status `succeeded`. Its commands describe
 enqueue/start/complete operations, not execution of an action.
+
+A command can commit and still be refused by the job rules, for example a
+second `EnqueueTask` for `task-17`. That refusal is a domain rejection. Every
+replica reaches the same one at the same log index, so the node stores it, the
+log keeps applying later commands, and `CommandResult.rejection` returns the
+reason to the client. `ReplicatedLogNode.rejection_for(index)` reads it back.
+
+## Tests
+
+`tests/test_lab_25_replicated_log.py` holds the unit tests. They check single
+replication rules such as majority commit, follower catch-up, restart from the
+retained log and the isolated leader's discarded entry.
+
+`tests/test_functional.py` holds the functional tests. They drive a whole
+`ReplicatedRelayCluster` through its public methods: elect a leader, submit
+the enqueue, start and complete commands for `task-17`, crash and restart
+nodes, and partition the network. They check that the job replicates to a
+majority and reaches `RelayTaskStatus.COMPLETED` on every replica, that a
+replacement leader keeps a committed job after the first leader crashes, that
+a duplicate job identifier is rejected without stalling the log, and that a
+command without a reachable majority never becomes visible.
+
+Run `pytest tests/test_lab_25_replicated_log.py` for the unit tests alone and
+`pytest tests/test_functional.py` for the functional tests alone.
+`pybootstrap check` runs both.
 
 ## Layout
 

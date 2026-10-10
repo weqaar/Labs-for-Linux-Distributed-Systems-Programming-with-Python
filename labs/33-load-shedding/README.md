@@ -27,8 +27,8 @@ dependencies are declared in `pyproject.toml`.
 ## Components
 
 Follow the decision in order: admission accepts or rejects new work, retry
-policy decides when another attempt is allowed, and the consumer records
-messages it can no longer process. A circuit breaker stops calls temporarily
+policy decides when another attempt is allowed, and the consumer moves
+messages it can no longer process to a dead-letter queue. A circuit breaker stops calls temporarily
 after failures; a half-open breaker permits a limited recovery probe.
 
 - `AdmissionController` caps worker slots and queue depth, then returns an
@@ -51,6 +51,22 @@ pip install -e ".[dev]"
 ```bash
 pybootstrap check
 ```
+
+## Tests
+
+`tests/test_lab_33_load_shedding.py` holds the unit tests. They check the
+admission bounds, backoff with jitter, the retry budget, the breaker states
+and dead-letter decisions one component at a time.
+
+`tests/test_functional.py` holds the functional tests. They drive
+`AdmissionController.submit` and `RetryingConsumer.process` across a stream
+of jobs: a full service rejects `task-19` and admits it after the
+`Retry-After` hint, a failing dependency opens the breaker until recovery,
+and poison or repeatedly failing jobs end in the dead-letter queue.
+
+Run each kind alone with `pytest tests/test_lab_33_load_shedding.py` or
+`pytest tests/test_functional.py`. `pybootstrap check` runs both.
+
 ## Python REPL debugging session
 
 After the editable install, inspect admission and retry policy:

@@ -1,7 +1,7 @@
 # Lab 22 Logical Clocks
 
 This lab orders task updates when machines disagree about the time.
-Wall time records a calendar timestamp. Logical clocks instead advance when
+Wall time is a calendar timestamp. Logical clocks instead advance when
 events occur or messages arrive, so their ordering does not depend on matching
 machine clocks. Each update keeps both forms:
 
@@ -57,6 +57,25 @@ ruff check src tests
 pyright src tests
 pytest
 ```
+
+## Tests
+
+`tests/test_lab_22_logical_clocks.py` holds the unit tests. They check the
+Lamport clock, the vector clock, update serialization and the Pendulum
+timestamp helpers one at a time.
+
+`tests/test_functional.py` holds the functional tests. They drive the public
+package interface the way an operator tool would: parse operator timestamps,
+exchange `task-17` updates between two `RelayReplica` objects, and order,
+serialize and display the results. They check that a skewed wall clock
+misorders the `queued`, `running` and `succeeded` updates while logical order
+keeps them in causal order, that conflicting outcomes are reported as
+concurrent, and that bad timestamps and job identifiers are rejected.
+
+Run `pytest tests/test_lab_22_logical_clocks.py` for the unit tests alone and
+`pytest tests/test_functional.py` for the functional tests alone.
+`pybootstrap check` runs both.
+
 ## Python REPL debugging session
 
 After the editable install, inspect clock values and operations:

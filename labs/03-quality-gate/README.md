@@ -1,7 +1,7 @@
 # Lab 03 Quality Gate
 
-This lab records whether a check passed, found a problem or could not
-run. These are different outcomes: a missing checker supplies no evidence
+This lab reports whether a check passed, found a problem or could not
+run. These are different outcomes: a missing checker tells you nothing
 about the code. The package converts those outcomes into exit codes and
 JUnit XML that a continuous integration system can publish. The Python
 import name in this lab is `relay`. That name does not mean the program
@@ -33,7 +33,7 @@ Installation may download tools, but local validation needs no subscription.
 1. Install below, then inspect `quality.py` and its test fake runner.
 2. Run `pytest -q tests/test_lab_03_quality_gate.py`. Trace one pass, one
    finding and one missing-tool result into `GateReport.to_junit_xml`.
-3. Complete the documentation exercises and retain JUnit evidence:
+3. Complete the documentation exercises and keep the JUnit XML reports:
 
 ```bash
 pybootstrap check --junit-dir .quality
@@ -63,6 +63,33 @@ ruff check src tests
 pyright src tests
 pytest
 ```
+
+## Tests
+
+A unit test checks one function or class on its own, with clocks, network,
+storage and other dependencies replaced by deterministic fakes. A functional
+test checks one complete feature through the lab's public interface, the way
+a reader would use it.
+
+`tests/test_lab_03_quality_gate.py` holds the unit tests. They check
+`run_gate`, `GateSuite`, `GateReport.to_junit_xml` and `SubprocessRunner`
+with a fake runner or a patched `subprocess.run`, so no tool starts.
+
+`tests/test_functional.py` holds the functional tests. They drive
+`GateSuite.run` with the real `SubprocessRunner` and actual child Python
+processes. They check that a pass, a finding, a missing checker and a rejected
+invocation each give the right overall exit code and JUnit XML.
+
+`tests/test_documentation.py` also holds functional tests. They build the
+documentation with Sphinx and fetch the pages from a server on 127.0.0.1.
+
+```bash
+pytest tests/test_lab_03_quality_gate.py
+pytest tests/test_functional.py tests/test_documentation.py
+```
+
+`pybootstrap check` runs both kinds of test in its test gate.
+
 ## Python REPL debugging session
 
 After the editable install, inspect the package actually loaded by Python:
@@ -128,7 +155,7 @@ shuts down and joins the server. All of this runs inside the pytest gate.
    expected value only in a scratch copy under `build/` and inspect the failing
    doctest diagnostics.
 4. Explain why `GateReport.exit_code` prioritizes errors over findings. Its
-   comment records that policy, not the mechanics of an `if` statement.
+   comment explains that policy, not the mechanics of an `if` statement.
    Add a comment only if another non-obvious decision needs a reason.
 5. Copy `quality.py` to `build/quality-without-docstring.py` and remove one
    public docstring in the copy. Run
@@ -140,7 +167,7 @@ shuts down and joins the server. All of this runs inside the pytest gate.
 PEP 8 recommends 79-character code lines; this repository intentionally uses
 100 for consistent lab formatting. `ruff format --check` enforces its configured
 layout, not complete PEP 8 compliance. Pydocstyle checks selected conventions,
-not the truth of a contract; examples, tests and review supply other evidence.
+not the truth of a contract; examples, tests and review check the contract in other ways.
 
 ## Optional Markdown comparison
 
@@ -160,11 +187,11 @@ replace those checks. Stop the preview with Ctrl-C; MkDocs is not a default gate
 reject every seeded documentation defect and finish the loopback HTTP smoke
 test. Your documentation exercise must also pass the two direct Sphinx commands.
 Retain the existing JUnit tests checking pass, failure, error and error precedence.
-No subscription or external service is needed for this evidence.
+No subscription or external service is needed for these test results.
 
 Explain why a missing executable becomes `<error>` rather than `<failure>`,
 and why an incomplete suite cannot pass. Exit 1 means a gate found problems;
 exit 2 means a gate could not run and supplied no verdict. Lab 39 retains these
 release principles, not an import of this package. Stop local previews and
 remove scratch documentation copies after the exercise; retain `.quality`
-only as long as its evidence is useful.
+only as long as its reports are useful.

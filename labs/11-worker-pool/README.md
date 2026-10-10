@@ -1,40 +1,48 @@
 # Lab 11 Thread and process workers with NUMA and accelerator-aware placement
 
-This lab gives SigRaft two bounded execution paths. The Python import name
-is `relay`. That name does not mean the program relays traffic. Threads lease
-queued jobs (called tasks in the code) that wait on input or output, then
-finish their current work during shutdown. Spawned
-processes execute CPU-oriented work in separate interpreters, communicate
-through queues, share selected coordination state through a manager, and read
-bulk bytes from shared memory.
+## Goal and purpose
 
-The NUMA exercise inspects Linux topology, balances process workers across
-allowed CPUs and nodes, and tests CPU and memory-policy adapters without
-assuming the test machine has more than one NUMA node. The accelerator
-exercise extends that same sysfs discipline to PCIe GPUs and RDMA-capable
-network adapters: parsing bus topology, checking IOMMU isolation groups,
-planning peer-to-peer or host-staged transfers and checking a RoCE fabric
-against a site's own congestion-control policy, all against fixture data
-rather than real hardware.
+This lab builds the concurrent worker execution subsystem for SigRaft.
+The package import name is `relay`. (This name is an internal project moniker;
+the program does not relay network traffic.)
 
-Here, a worker is a thread or process that handles submitted work. A visibility
-lease temporarily hides a queued item while a worker handles it. NUMA means
-non-uniform memory access: different CPUs may reach the same memory at
-different costs. The placement exercises ask which CPUs, memory and devices
-belong near one another; they do not assume that the host has those devices.
+In distributed systems, executing background jobs requires matching each type
+of workload to the right execution model:
+1. **Threaded workers for I/O-bound jobs:** Threads pull jobs from a queue using
+   time-limited visibility leases. When a worker leases a job, the queue hides
+   it from other workers. If the worker finishes successfully, it acknowledges
+   the job; if the worker crashes or times out, the lease expires and the job
+   reappears on the queue for another worker to retry.
+2. **Spawned processes for CPU-bound jobs:** To bypass Python's Global
+   Interpreter Lock (GIL) and run computation across multiple CPU cores, child
+   processes are spawned using an explicit `spawn` context. Processes exchange
+   inputs and results over bounded queues, synchronize progress counters
+   through manager proxies, and read large datasets from shared-memory blocks.
+3. **NUMA discovery and memory locality:** On multi-socket servers, accessing
+   memory attached to another CPU socket (remote memory) is significantly
+   slower than accessing local memory. The lab reads Linux `sysfs` topology to
+   balance workers across CPU nodes and bind processes to local memory.
+4. **Accelerator and PCIe topology:** The lab inspects PCIe device trees to
+   discover GPUs and RDMA network cards, identify IOMMU isolation groups, and
+   plan direct peer-to-peer DMA transfers without unnecessary host RAM copies.
 
-## Goal and preparation
+## Learning outcomes
 
-Learn which component releases a lease, joins a child process and unlinks a
-shared-memory segment. You will run the supplied worker paths and
-inspect topology fixtures before attempting optional host placement.
+By completing this lab, you will understand:
+- How message visibility leases prevent duplicate execution while ensuring
+  automatic recovery when workers crash.
+- How to manage child process lifecycles, graceful shutdown, and shared memory
+  cleanup without resource leaks.
+- How Non-Uniform Memory Access (NUMA) affects memory latency and throughput.
+- How Linux exposes CPU, memory, and PCIe accelerator topology through `sysfs`.
+
+## Prerequisites and setup
+
 Use Python 3.10 or later in this directory and read
 [`CODING_STANDARDS.md`](../CODING_STANDARDS.md) and `AGENTS.md`.
 Threads, multiprocessing and shared memory are standard-library facilities.
 NUMA bindings are an optional extra in `pyproject.toml`; no accelerator,
 cluster or subscription is required for the gate.
-
-## Set up the lab
 
 ```bash
 python3 -m venv .venv
@@ -134,7 +142,7 @@ that:
 - the parent unlinks the shared-memory name once
 
 Shared memory avoids sending the complete payload through every queue. It does
-not supply locks, record validity, byte order, or recovery after a partial
+not supply locks, data validity, byte order, or recovery after a partial
 write.
 
 ## Exercise 6 Inspect multicore capacity
@@ -216,7 +224,7 @@ normal gate injects a fake binding, so it neither changes test-runner affinity
 nor depends on host topology.
 
 Benchmark local and remote placement with a sequential buffer, a fixed stride,
-and random offsets. Record elapsed time, throughput, affinity,
+and random offsets. Write down elapsed time, throughput, affinity,
 `/proc/PID/numa_maps`, `numastat -p PID`, and permitted `perf stat` cache
 counters. Recreate and initialize the buffer after every policy change.
 
@@ -225,12 +233,12 @@ counters. Recreate and initialize the buffer after every policy change.
 `accelerators.py` extends the same sysfs discipline from Exercise 7 to PCI
 devices generally. sysfs exposes hardware information as files.
 PCIe connects devices such as graphics processing units (GPUs) and network
-adapters to the host. `PciFunction` is the general record produced by walking
+adapters to the host. `PciFunction` is the general object produced by walking
 `/sys/devices`: a bus address, a NUMA affinity hint, a class code and the
 chain of PCIe bridge ancestors above it. `AcceleratorDevice` names that same
-record when returned by accelerator-filtered discovery. It is a naming alias,
+object when returned by accelerator-filtered discovery. It is a naming alias,
 not a separate Python type or a device-class validator. Network discovery
-returns `PciFunction` records with network-controller class codes.
+returns `PciFunction` objects with network-controller class codes.
 `discover_accelerator_topology` and `discover_network_topology` are both
 thin, class-filtered wrappers around the general `discover_pci_topology`:
 
@@ -244,7 +252,7 @@ for placement in placements:
 ```
 
 `plan_accelerator_workers` defaults to selecting all requested accelerators
-from one recorded NUMA node. If no node has enough devices it raises an error;
+from one reported NUMA node. If no node has enough devices it raises an error;
 passing `single_numa_node=False` allows selection across nodes. This resembles
 one locality decision in kubelet's Topology Manager, not its complete admission
 algorithm. It neither aligns CPUs and memory nor reserves devices, and it
@@ -264,8 +272,8 @@ IOMMU never inspects.
 `peer_to_peer_feasible` and `plan_transfer` estimate whether a GPU and a
 network adapter share enough PCIe ancestry for a GPUDirect-style peer-to-peer
 DMA path, or whether the safer choice is staging through a host-pinned
-buffer on the network adapter's recorded NUMA node. Both accept `PciFunction`
-records and compare their ancestor paths; neither initiates DMA or allocates a
+buffer on the network adapter's reported NUMA node. Both accept `PciFunction`
+objects and compare their ancestor paths; neither initiates DMA or allocates a
 buffer. A shared path does not establish hardware support: a port with PCIe Access
 Control Services (ACS) enabled can still redirect a peer-to-peer transaction
 up to the root complex, which both functions accept as an
@@ -292,6 +300,22 @@ instead of host hardware. The tests build sysfs-shaped fixtures the same way
 `test_numa_topology_is_read_from_sysfs_contract` does, so the normal gate
 checks parsing and placement decisions without a GPU, a PCIe switch, an
 InfiniBand adapter or a RoCE fabric.
+
+## Tests
+
+The lab has two kinds of test. `tests/test_lab_11_worker_pool.py` holds the
+unit tests. They check the queue, the pool, the process helpers and the
+topology parsers one at a time against fixtures and fakes.
+
+`tests/test_functional.py` holds the functional tests. They drive
+`RelayWorkerPool` through `submit`, `start`, `snapshot`, `request_shutdown`
+and `join` over the in-memory queue with a manual clock. They check that
+jobs move from `queued` through `running` to `succeeded` or `failed`, that a
+job abandoned by a lost worker is delivered again after its lease expires,
+and that a job submitted in another state is rejected.
+
+Run each kind alone with `pytest tests/test_lab_11_worker_pool.py` or
+`pytest tests/test_functional.py`. `pybootstrap check` runs both.
 
 ## Completion condition
 

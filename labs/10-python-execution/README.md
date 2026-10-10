@@ -19,7 +19,7 @@ The runtime uses only the standard library, including `tokenize`, `ast` and
 RISC-V board nor a custom interpreter is needed here.
 
 A token identifies a piece of source text. An abstract syntax tree (AST)
-records how those pieces form statements and expressions. A code object holds
+shows how those pieces form statements and expressions. A code object holds
 the compiled Python instructions and related values. The exercise virtual
 machine below uses a much smaller instruction set to make execution
 steps visible. It is not the CPython virtual machine.
@@ -88,6 +88,21 @@ VM. Its operand-stack entries are references to Python objects. Use
 code-object fields and `dis` instructions. This comparison prepares you for
 Lab 15, where adding an instruction requires rebuilding CPython rather than
 changing the exercise virtual machine.
+## Tests
+
+The lab has two kinds of test. `tests/test_lab_10_python_execution.py` holds
+the unit tests. They check single functions and classes such as the
+instruction encoder, the tokenizer outline and individual VM opcodes.
+
+`tests/test_functional.py` holds the functional tests. They use the public
+package interface from start to finish: the RV32I simulator adds two
+registers, the stack machine turns the sum into `task-17`, and the source
+inspector compiles code without running it. They also check that a program
+without `RETURN`, a non-ADD instruction and invalid source are rejected.
+
+Run each kind alone with `pytest tests/test_lab_10_python_execution.py` or
+`pytest tests/test_functional.py`. `pybootstrap check` runs both.
+
 ## Python REPL debugging session
 
 Use the prompt to inspect tokens and the AST tree without executing the source:

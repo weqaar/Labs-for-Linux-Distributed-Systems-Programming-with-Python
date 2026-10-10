@@ -124,5 +124,20 @@ def test_only_a_leader_can_accept_client_commands() -> None:
         )
 
 
+def test_restart_rebuilds_the_same_domain_rejection_from_the_log() -> None:
+    cluster = make_cluster()
+    cluster.submit_command("n1", EnqueueTask(task_id="task-5", queue="default", created_tick=1))
+    duplicate = cluster.submit_command(
+        "n1", EnqueueTask(task_id="task-5", queue="default", created_tick=2)
+    )
+    cluster.crash_node("n2")
+
+    restarted = cluster.restart_node("n2")
+
+    assert restarted.rejection_for(duplicate.index) == "task-5 already exists"
+    assert restarted.rejection_for(1) is None
+    assert restarted.last_applied == restarted.commit_index
+
+
 def test_version_is_exposed() -> None:
     assert __version__

@@ -6,7 +6,7 @@ without scanning a network.
 
 ## Goal and activities
 
-Interpret packet evidence without confusing a refusal with silence. You will
+Interpret probe results without confusing a refusal with silence. You will
 construct bytes, parse headers and classify responses using the supplied
 reference implementation. This teaches connection diagnosis for the SigRaft
 job-management web service, not a live network scanner or installed `relayctl`
@@ -23,7 +23,7 @@ only in `pyproject.toml`.
 3. Change its flags to RST/ACK and compare the classification. Read the ICMP
    and timeout tests: no packet received is not proof of a filtering rule.
 4. Run `pytest -q tests/test_lab_13_packet_tools.py` and retain a test for
-   each distinct evidence category.
+   each distinct response category.
 
 ## Names this lab keeps
 
@@ -35,7 +35,7 @@ only in `pyproject.toml`.
 This lab does not need raw sockets or live cloud networking. It plans
 the probe sequence that `relayctl` would use, parses constructed IPv4, TCP,
 UDP, and ICMP packets, and distinguishes refused ports, silent timeouts, and
-filtered or unreachable paths from deterministic test evidence.
+filtered or unreachable paths using deterministic tests.
 
 ## Getting started
 
@@ -64,6 +64,21 @@ ruff check src tests
 pyright src tests
 pytest
 ```
+
+## Tests
+
+`tests/test_lab_13_packet_tools.py` holds the unit tests. They check the
+packet builders, the parsers and the classifier one function at a time.
+
+`tests/test_functional.py` holds the functional tests. They drive the public
+package interface through a whole diagnosis: build the probe plan for job
+`task-17`, collect a reply from a fake host for each step, then parse and
+classify every reply. They cover a healthy host, a host behind a firewall, a
+truncated capture and an invalid probe timeout. The fake host constructs
+packets offline, so no raw socket or root permission is needed.
+
+Run each kind alone with `pytest tests/test_lab_13_packet_tools.py` or
+`pytest tests/test_functional.py`. `pybootstrap check` runs both.
 
 ## Exit codes
 

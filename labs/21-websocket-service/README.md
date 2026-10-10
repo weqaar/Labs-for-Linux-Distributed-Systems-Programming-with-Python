@@ -29,7 +29,7 @@ It does not replace the REST API or give resolvers permission to bypass the
 domain service.
 
 Keep the stream model separate from the GraphQL subscription implementation.
-`taskEvents(after: ...)` iterates retained records and then ends; it does not
+`taskEvents(after: ...)` iterates retained events and then ends; it does not
 wait for future events. Its returned `Task` fields omit the event sequence,
 so a client cannot derive its next resume position from those results alone.
 The cursor on a paginated task query is not a subscription resume cursor.
@@ -74,6 +74,22 @@ ruff check src tests
 pyright src tests
 pytest
 ```
+
+## Tests
+
+The lab has two kinds of test. `tests/test_lab_21_websocket_service.py` holds
+the unit tests. They check the stream session, broker, reconnect policy and
+GraphQL resolvers one behavior at a time with the fake clock.
+
+`tests/test_functional.py` holds the functional tests. Two of them open a real
+`graphql-transport-ws` connection on a loopback port to submit a job and read
+it back, and to see a missing scope or a conflicting duplicate `task-17`
+refused. The others follow a job's status stream through `RelayStreamSession`
+across a reconnect to `succeeded`, and check that an expired token closes the
+reconnect before any replay.
+
+Run each kind alone with `pytest tests/test_lab_21_websocket_service.py` or
+`pytest tests/test_functional.py`. `pybootstrap check` runs both.
 ## Python REPL debugging session
 
 Inspect the schema and stream objects before opening a connection:

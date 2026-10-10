@@ -1,20 +1,34 @@
 # Lab 32 Container Deploy
 
-This lab keeps the SigRaft Kubernetes rollout files offline and adds a
-local-runtime planning step for the same service. The lab covers Azure and
-Kubernetes deployment, plus dry-run plans for QEMU with TCG, QEMU with KVM,
-libvirt on KVM, Docker, unprivileged LXC, and Kata utility VMs.
+## Goal and purpose
 
-KVM matters here as a Linux accelerator that QEMU and libvirt use. It is not a
-VM manager on its own. When KVM is absent, QEMU with TCG is the portable
-fallback, but it is slow.
+This lab builds and validates the deployment automation for SigRaft.
+The package import name is `relay`. (This name is an internal project moniker;
+the program does not relay network traffic.)
 
-QEMU runs a virtual machine; TCG translates its instructions in software.
-libvirt manages virtual machines through a common API. Docker and LXC instead
-share the host kernel, while Kata places containers inside a small VM. The
-planner compares these boundaries without starting any of them.
+The lab establishes how SigRaft packages, verifies, and runs across diverse
+production runtimes:
+1. **Container packaging:** Multi-stage `Dockerfile` creating minimal, non-root
+   container images pinned by immutable cryptographic digests.
+2. **Kubernetes serving path:** Declarative manifests configuring health probes
+   (startup, readiness, and liveness), replica sets, ClusterIP service discovery,
+   Nginx Ingress routing, Horizontal Pod Autoscalers, and PodDisruptionBudgets.
+3. **Release and rollback strategies:** Offline verification of canary deployments
+   (splitting 10% of traffic to a new revision), blue-green cutovers, and
+   automated rollbacks.
+4. **Local runtime planning:** Dry-run execution planners that compare security
+   boundaries, kernel isolation, and overhead across Docker, unprivileged LXC,
+   Kata Containers, and QEMU/KVM virtual machines.
 
-## Goal and working order
+## Learning outcomes
+
+By completing this lab, you will understand:
+- How immutable image digests prevent untracked drift in deployment pipelines.
+- How Kubernetes health probes and ingress controllers manage traffic during rollouts.
+- How to design safe canary and blue-green deployment strategies with instant rollback.
+- The security and performance tradeoffs between containers, micro-VMs, and full virtualization.
+
+## Prerequisites and setup
 
 Connect a container image, a serving path and a rollback decision, while
 keeping a runtime plan separate from actually starting that runtime. A
@@ -40,7 +54,7 @@ or Azure subscription.
 
 ## Artifacts
 
-Read the image definition first, then the deployment and rollout records.
+Read the image definition first, then the deployment and rollout files.
 The files describe what should run and how it should be replaced; the offline
 validator checks their declarations, not the health of a deployed service.
 
@@ -50,17 +64,17 @@ validator checks their declarations, not the health of a deployed service.
   Service, Nginx Ingress, HPA and PodDisruptionBudget.
 - `deploy/relay-canary.yaml` runs a second image version and sends ten per cent
   of Nginx traffic to it.
-- `deploy/release-strategies.yaml` records rolling, canary and blue-green
+- `deploy/release-strategies.yaml` lists rolling, canary and blue-green
   promotion and rollback commands.
 - `deploy/relay-environments.yaml` separates staging and production namespaces
   and resource quotas.
 - `deploy/kind-cluster.yaml` creates one local control plane and two workers.
-- `deploy/rollout-checkpoint.yaml` records the current digest, the previous
+- `deploy/rollout-checkpoint.yaml` stores the current digest, the previous
   digest, and the one-line rollback command.
 - `deploy/relay-local-lxc.conf` shows the unprivileged LXC uid and gid mapping,
   read-only rootfs plan, and capability drop. Replace `/srv/relay/rootfs` with
   the absolute path to the prepared root filesystem on the host.
-- `deploy/relay-kata-runtimeclass.yaml` records the RuntimeClass used when relay
+- `deploy/relay-kata-runtimeclass.yaml` declares the RuntimeClass used when relay
   should run inside a Kata utility VM.
 - `src/lab_32_container_deploy/checkpoint.py` validates the Kubernetes and
   container artifacts offline.
@@ -146,11 +160,35 @@ Ingress. Apply `relay-canary.yaml` only after the stable service is ready. Abort
 the canary by deleting its Ingress, Service and Deployment. The production
 exercise deploys the same artifacts to the AKS cluster created by Lab 08.
 
-The tag override is a local exercise convenience, not release evidence.
-For staging/production, publish the working image, record its real digest,
+The tag override is a local exercise convenience, not part of a release report.
+For staging/production, publish the working image, write down its real digest,
 configure real workload identity and use that digest for promotion. HPA needs
 a metrics source; Ingress needs its controller. YAML presence does not prove
 those controllers are installed.
+
+## Tests
+
+A unit test checks one function or class on its own, with clocks, network,
+storage and other dependencies replaced by deterministic fakes. A functional
+test checks one complete feature through the lab's public interface, the way
+a reader would use it.
+
+`tests/test_lab_32_container_deploy.py` and `tests/test_local_runtime.py`
+hold both kinds. The unit tests check the deployment artifacts, the
+`RelayApplication` handler called directly, the runtime planner and the
+Docker, Kubernetes, libvirt and QMP adapters with injected fakes. The
+functional tests are `test_http_handler_serves_requests_over_http` and
+`test_cli_plan_prints_json_for_a_portable_vm_host`. The first starts the relay
+HTTP handler on 127.0.0.1 and calls `/livez` and `/tasks` with a real client.
+The second runs the `plan` command through `main(argv)` and reads its JSON.
+
+```bash
+pytest tests -k "not http_handler and not cli_plan"
+pytest tests -k "http_handler or cli_plan"
+```
+
+`pybootstrap check` runs both kinds of test in its test gate.
+
 ## Python REPL debugging session
 
 Inspect deployment artifacts before contacting a runtime or cluster:
@@ -175,7 +213,7 @@ routes incoming HTTP, and the autoscaler changes replica count.
 
 Finish when you can explain digest identity, probe roles, isolation boundaries
 and rollback, and `pybootstrap check` exits 0. Exit 1 means findings; exit 2
-means a gate could not run. Optional live evidence must separately show the
+means a gate could not run. Optional live tests must separately show the
 working image and rollout. Delete only the owned kind cluster with
 `kind delete cluster --name relay`, remove `relay-kind.yaml`, and clean up
 any other runtime resources you deliberately created. Never operate a shared

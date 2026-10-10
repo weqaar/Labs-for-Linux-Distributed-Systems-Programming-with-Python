@@ -65,6 +65,23 @@ ruff check src tests
 pyright src tests
 pytest
 ```
+## Tests
+
+The lab has two kinds of test. `tests/test_lab_09_azure_sdk.py` holds the
+unit tests. They check one adapter method, parser or builder at a time against
+fake SDK clients, including the mapping of each Azure exception to a relay
+error.
+
+`tests/test_functional.py` holds the functional tests. They build the blob
+store and queue dispatcher through `build_blob_task_store` and
+`build_queue_task_dispatcher` with fake SDK clients, then submit `task-17`,
+move it from `queued` through `running` to `succeeded`, and list jobs page by
+page. They also check that a lost enqueue reply is not retryable and that a
+missing job and a denied read raise different errors.
+
+Run each kind alone with `pytest tests/test_lab_09_azure_sdk.py` or
+`pytest tests/test_functional.py`. `pybootstrap check` runs both.
+
 ## Python REPL debugging session
 
 After the editable install, inspect the adapter boundary:

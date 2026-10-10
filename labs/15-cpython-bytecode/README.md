@@ -61,7 +61,7 @@ them shows which layer must change for each kind of extension.
 
 The exercise uses CPython 3.14.7, tag `v3.14.7`, at commit
 `823f0323ee6ec1402088b73bce1a38473cac36dc`. The exact source and generated
-files are recorded in `artifacts/source-manifest.json`.
+files are listed in `artifacts/source-manifest.json`.
 
 Clone and verify that revision:
 
@@ -153,6 +153,21 @@ artifacts/*.patch                      reviewed CPython source change
 artifacts/source-manifest.json         source, generation, build, and test record
 tests/                                 deterministic parser and patch checks
 ```
+## Tests
+
+`tests/test_lab_15_cpython_bytecode.py` holds the unit tests. They check the
+query grammar, the source pin, the build plan and the patch markers
+separately.
+
+`tests/test_functional.py` holds the functional tests. They drive
+`select_tasks` with query text while jobs move from `queued` to `running`
+and then to `succeeded` or `failed`, and they reject a query with trailing
+text. A further test prepares the optional build by checking the committed
+patch and the build plan without cloning or compiling anything.
+
+Run each kind alone with `pytest tests/test_lab_15_cpython_bytecode.py` or
+`pytest tests/test_functional.py`. `pybootstrap check` runs both.
+
 ## Python REPL debugging session
 
 Inspect the parser and ordinary interpreter before building custom CPython:

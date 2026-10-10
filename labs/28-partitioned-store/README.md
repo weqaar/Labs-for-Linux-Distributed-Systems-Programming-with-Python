@@ -67,6 +67,31 @@ pip install -e ".[dev]"
 ```bash
 pybootstrap check
 ```
+
+## Tests
+
+A unit test checks one function or class on its own, with clocks, network,
+storage and other dependencies replaced by deterministic fakes. A functional
+test checks one complete feature through the lab's public interface, the way
+a reader would use it.
+
+`tests/test_lab_28_partitioned_store.py` holds the unit tests. They check
+ring balance and key movement, single quorum rules, sibling versions and
+placement agreement with a second Python process.
+
+`tests/test_functional.py` holds the functional tests. They drive the public
+`ReplicatedTaskStore` through a whole job lifecycle for `task-17`, from
+`queued` to `running` to `succeeded`, and read it back from every replica
+slice. They also cover a conflicting `succeeded` and `failed` result and the
+errors for an unknown job and an unknown observed version.
+
+```bash
+pytest tests/test_lab_28_partitioned_store.py
+pytest tests/test_functional.py
+```
+
+`pybootstrap check` runs both kinds of test in its test gate.
+
 ## Python REPL debugging session
 
 After the editable install, inspect partition and replica objects:

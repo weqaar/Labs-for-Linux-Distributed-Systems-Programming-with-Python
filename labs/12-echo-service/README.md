@@ -1,24 +1,32 @@
 # Lab 12 Echo Service
 
-This lab sends bytes from the SigRaft package through real TCP and UDP sockets
-on loopback. The Python import name is `relay`. That name does not mean the
-program relays traffic. Scapy, used offline, shows how a message you
-supply becomes a TCP segment or UDP datagram, an IPv4 packet and an Ethernet frame, then returns to
-application bytes.
+## Goal and purpose
 
-## Goal and working order
+This lab implements the low-level network transport foundations for SigRaft.
+The package import name is `relay`. (This name is an internal project moniker;
+the program does not relay network traffic.)
 
-Observe the difference between a byte stream and a datagram, then distinguish
-kernel socket behavior from offline packet representation. The supplied echo
-servers return bytes; they do not execute tasks or expose an HTTP `/tasks` API.
-This is the transport lab for the SigRaft job-management web service,
-not a package automatically imported by Lab 39.
+The lab introduces how network protocols exchange job data across sockets:
+1. **TCP stream sockets:** TCP provides an ordered, reliable byte stream.
+   Because TCP does not preserve write boundaries, an application cannot
+   assume that one `send()` corresponds to one `recv()`. The lab tests
+   reading fragmented chunks and reconstructing the original payload.
+2. **UDP datagram sockets:** UDP sends independent datagrams that preserve
+   message boundaries, but does not guarantee delivery or ordering. The lab
+   tests deliberate packet drops and verifies client-side retry logic.
+3. **Packet encapsulation and decapsulation:** Using Scapy offline,
+   the lab constructs and inspects each protocol layer (Application payload,
+   Transport TCP/UDP headers, Internet IPv4 packet, and Link Ethernet frame).
 
-Use Python 3.10 or later here and read
-[`CODING_STANDARDS.md`](../CODING_STANDARDS.md) and `AGENTS.md`.
-The socket code uses the standard library; Scapy is the declared runtime
-dependency for packet inspection. No root access, Azure subscription or
-external network is required, but loopback sockets must be permitted.
+## Learning outcomes
+
+By completing this lab, you will understand:
+- Why stream protocols (TCP) require framing and cannot rely on read boundaries.
+- Why datagram protocols (UDP) require application-level timeouts and retries.
+- How the Linux network stack encapsulates application data into packets.
+- How to write socket-based servers with clean shutdown and timeout handling.
+
+## Prerequisites and setup
 
 1. Install below and run the packet journey with a short message.
 2. Compare the TCP and UDP header sizes in the REPL.
@@ -124,6 +132,33 @@ src/lab_12_echo_service/    the package
 tests/                the test suite
 pyproject.toml        dependencies, tool settings and gate definition
 ```
+
+## Tests
+
+A unit test checks one function or class on its own, with clocks, network,
+storage and other dependencies replaced by deterministic fakes. A functional
+test checks one complete feature through the lab's public interface, the way
+a reader would use it.
+
+`tests/test_lab_12_echo_service.py` and `tests/test_packet_journey.py` hold
+both kinds. The unit tests check the task wire format, argument validation and
+the offline packet model built with Scapy. The functional tests start the TCP
+or UDP echo server on 127.0.0.1 with port 0 and talk to it with the real
+client, or run the `relay-packet-journey` entry point. They are
+`test_echo_server_round_trips_bytes_over_loopback`,
+`test_reads_do_not_preserve_write_boundaries`,
+`test_server_shutdown_is_clean_and_stops_accepting_connections`,
+`test_udp_echo_preserves_one_datagram_boundary`,
+`test_udp_reliability_requires_an_application_retry_policy`,
+`test_echoed_application_bytes_match_the_packet_trace` and
+`test_cli_prints_requested_view`.
+
+```bash
+pytest tests -k "not (echo_server or write_boundaries or shutdown or udp_echo or udp_reliability or echoed or cli_prints)"
+pytest tests -k "echo_server or write_boundaries or shutdown or udp_echo or udp_reliability or echoed or cli_prints"
+```
+
+`pybootstrap check` runs both kinds of test in its test gate.
 
 ## Python REPL debugging session
 
